@@ -40,6 +40,25 @@ repart de zéro.
 - Le nombre de cartes à réviser s'affiche sur le bouton « Réviser », et la
   fiche de chaque entrée indique sa prochaine révision.
 
+## Livres et films (Goodreads, Letterboxd)
+
+Menu **Exporter / Importer → Livres et films** : on choisit l'export de son
+compte, et chaque livre lu ou film vu devient une entrée (carte primaire de
+type « objet ») avec sa carte de révision.
+
+- **Goodreads** : *My Books → Import and export → Export Library*, puis le
+  fichier `.csv`. Seule l'étagère « read » est prise ; frise Littérature.
+- **Letterboxd** : *Settings → Data → Export your data*, puis le `.zip` tel
+  quel (ou l'un de ses CSV) ; frise Cinéma.
+- Date proposée : année de publication ou de sortie, modifiable avant import
+  pour placer l'œuvre à l'époque qu'elle raconte. « Comment je l'ai appris »
+  reprend la date de lecture ou de visionnage et la note ; la critique
+  Goodreads, s'il y en a une, devient le descriptif.
+- Réimporter un export plus récent n'ajoute que les nouveautés.
+- Pas de synchronisation automatique : Goodreads n'a plus d'API publique et
+  les flux RSS des deux sites ne sont pas lisibles depuis une page statique
+  (CORS). Il faudrait un petit serveur relais.
+
 ## Export / import
 
 - **Excel (.xlsx)** : une feuille « Toutes les entrées », une feuille par
