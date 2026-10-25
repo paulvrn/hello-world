@@ -1,0 +1,26 @@
+<%- include('../partials/head', { title: 'Projets', wide: true }) %>
+<h1>Demandes clients</h1>
+<div class="card">
+<% if (!projects.length) { %><p class="muted">Aucune demande pour le moment.</p><% } else { %>
+<table>
+  <thead><tr><th>Réf.</th><th>Reçue le</th><th>Client</th><th>Projet</th><th>Qté</th><th>Zone</th><th>Maturité</th><th>Éval.</th><th>Consult.</th><th>Étape</th></tr></thead>
+  <tbody>
+  <% projects.forEach(p => { %>
+    <tr class="<%= p.admin_seen ? '' : 'unseen' %>">
+      <td><a href="/admin/projets/<%= p.id %>"><%= p.ref %></a><% if (!p.admin_seen) { %> <span class="badge">nouveau</span><% } %></td>
+      <td><%= fmtDate(p.created_at) %></td>
+      <td><%= p.contact_company %></td>
+      <td><%= p.title %></td>
+      <td><%= p.quantity %></td>
+      <td><%= REGIONS[p.region] %></td>
+      <td><%= MATURITIES[p.maturity] %></td>
+      <td><%= p.complexity ? p.complexity + '/5' : '—' %> · <%= p.est_hours != null ? p.est_hours + ' h' : '—' %></td>
+      <td><%= p.consulted %><%= p.quotes ? ` (${p.quotes} offre${p.quotes > 1 ? 's' : ''})` : '' %></td>
+      <td><%= STEPS[p.step - 1].label %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+<% } %>
+</div>
+<%- include('../partials/foot') %>

@@ -1,0 +1,21 @@
+<dl class="recap">
+  <dt>Référence</dt><dd><strong><%= project.ref %></strong></dd>
+  <dt>Projet</dt><dd><%= project.title %></dd>
+  <dt>Société</dt><dd><%= project.contact_company %></dd>
+  <dt>Contact</dt><dd><%= project.contact_name %> · <%= project.contact_email %><%= project.contact_phone ? ' · ' + project.contact_phone : '' %></dd>
+  <dt>Lieu de fabrication</dt><dd><%= REGIONS[project.region] %></dd>
+  <dt>Quantité</dt><dd><%= project.quantity %></dd>
+  <dt>Maturité</dt><dd><%= MATURITIES[project.maturity] %></dd>
+  <dt>Cadre de la demande</dt><dd><%= CONTEXTS[project.context] %></dd>
+  <dt>Délai souhaité</dt><dd><%= project.desired_deadline ? fmtDate(project.desired_deadline) : 'Non précisé' %></dd>
+  <dt>Prix cible</dt><dd><%= project.target_price || 'Non précisé' %></dd>
+  <dt>Précisions</dt><dd class="pre"><%= project.notes || '—' %></dd>
+  <dt>Documents</dt>
+  <dd>
+    <ul class="files">
+      <% files.forEach(f => { %>
+      <li><span class="tag"><%= FILE_KINDS[f.kind] %></span> <%= f.original_name %> <small class="muted"><%= fmtSize(f.size) %></small></li>
+      <% }) %>
+    </ul>
+  </dd>
+</dl>

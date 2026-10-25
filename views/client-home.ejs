@@ -1,0 +1,18 @@
+<%- include('partials/head', { title: 'Mes projets' }) %>
+<div class="row-between">
+  <h1>Mes projets</h1>
+  <a class="btn btn-primary" href="/">+ Nouvelle demande</a>
+</div>
+<% if (!user.email_verified) { %>
+<div class="flash flash-info">Confirmez votre adresse e-mail (lien envoyé à <%= user.email %>) pour retrouver ici toutes les demandes envoyées avec cette adresse.</div>
+<% } %>
+<% if (!projects.length) { %>
+<div class="card center"><p>Aucun projet pour le moment.</p></div>
+<% } %>
+<% projects.forEach(project => { %>
+<a class="card card-link" href="/suivi/<%= project.tracking_token %>">
+  <div class="row-between"><h2><%= project.ref %> – <%= project.title %></h2><small class="muted">envoyé le <%= fmtDate(project.created_at) %></small></div>
+  <%- include('partials/timeline', { project }) %>
+</a>
+<% }) %>
+<%- include('partials/foot') %>

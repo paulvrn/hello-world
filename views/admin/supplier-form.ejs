@@ -1,0 +1,19 @@
+<%- include('../partials/head', { title: supplier.company || 'Nouveau sous-traitant' }) %>
+<h1><%= supplier.id ? supplier.company : 'Nouveau sous-traitant' %></h1>
+<form method="post" action="/admin/sous-traitants<%= supplier.id ? '/' + supplier.id : '' %>" class="card form">
+  <label>E-mail *<input type="email" name="email" required value="<%= supplier.email || '' %>"></label>
+  <%- include('../partials/criteria-fields', { s: supplier }) %>
+  <label>Notes internes<textarea name="admin_notes" rows="3"><%= supplier.admin_notes || '' %></textarea></label>
+  <label class="check"><input type="checkbox" name="active" value="1" <%= supplier.active ? 'checked' : '' %>> Actif (proposé dans les présélections)</label>
+  <button class="btn btn-primary">Enregistrer</button>
+</form>
+<% if (typeof consultations !== 'undefined' && consultations.length) { %>
+<div class="card">
+  <h2>Consultations</h2>
+  <table><tbody><% consultations.forEach(c => { %>
+    <tr><td><a href="/admin/projets/<%= c.project_id %>"><%= c.ref %></a> <%= c.title %></td><td><%= fmtDate(c.sent_at) %></td>
+      <td><span class="status status-<%= c.status %>"><%= CONSULTATION_STATUS[c.status] %></span></td><td><%= c.price || '' %></td></tr>
+  <% }) %></tbody></table>
+</div>
+<% } %>
+<%- include('../partials/foot') %>

@@ -1,0 +1,145 @@
+<%- include('../partials/head', { title: project.ref, wide: true }) %>
+<% const p = project; %>
+<div class="row-between">
+  <h1><%= p.ref %> <small class="muted">– <%= p.title %></small></h1>
+  <a href="/suivi/<%= p.tracking_token %>" target="_blank">Vue client ↗</a>
+</div>
+<div class="card"><%- include('../partials/timeline', { project: p }) %></div>
+
+<div class="cols">
+  <div>
+    <div class="card">
+      <h2>Demande client</h2>
+      <%- include('../partials/recap', { project: p, files }) %>
+      <% if (p.clarification_request) { %>
+      <h3>Précisions</h3>
+      <p class="pre quote"><strong>Question :</strong> <%= p.clarification_request %></p>
+      <p class="pre"><strong>Réponse :</strong> <%= p.clarification_answer || 'en attente…' %></p>
+      <% } %>
+    </div>
+
+    <div class="card" id="fichiers">
+      <h2>Documents & anonymisation</h2>
+      <p class="hint">Les sous-traitants ne reçoivent que les fichiers « partagés », sous un nom neutre (<%= p.ref %>-plan-1.pdf…). Les PDF sont automatiquement purgés de leurs métadonnées (auteur, société, logiciel), mais <strong>le cartouche et les logos restent visibles</strong> : vérifiez-les et déposez une version caviardée si besoin.</p>
+      <table>
+        <thead><tr><th>Fichier</th><th>Version transmise</th><th>Partage</th></tr></thead>
+        <tbody>
+        <% files.forEach(f => { %>
+        <tr>
+          <td><span class="tag"><%= FILE_KINDS[f.kind] %></span> <a href="/admin/fichiers/<%= f.id %>"><%= f.original_name %></a></td>
+          <td>
+            <% if (!f.anon_stored_name) { %><span class="status status-declined">aucune</span>
+            <% } else if (f.anon_stored_name === f.stored_name) { %><span class="status">original validé</span>
+            <% } else { %><a href="/admin/fichiers/<%= f.id %>?version=anon"><%= f.anon_manual ? 'caviardée' : 'métadonnées purgées' %></a><% } %>
+            <form method="post" action="/admin/fichiers/<%= f.id %>/anonyme" enctype="multipart/form-data" class="mini">
+              <input type="file" name="file" required><button class="btn btn-small">Déposer version caviardée</button>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="/admin/fichiers/<%= f.id %>/partage" class="mini">
+              <% if (f.share_with_suppliers) { %>
+                <input type="hidden" name="share" value="0"><span class="status status-quoted">partagé</span> <button class="link">retirer</button>
+              <% } else { %>
+                <input type="hidden" name="share" value="1">
+                <% if (!f.anon_stored_name) { %><label class="check"><input type="checkbox" name="confirm" value="1"> ne contient aucune info client</label><% } %>
+                <button class="btn btn-small">Partager</button>
+              <% } %>
+            </form>
+          </td>
+        </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" id="historique">
+      <h2>Historique</h2>
+      <form method="post" action="/admin/projets/<%= p.id %>/note" class="row mini">
+        <input name="message" placeholder="Ajouter une note / un jalon">
+        <label class="check"><input type="checkbox" name="visible" value="1"> visible client</label>
+        <button class="btn btn-small">Ajouter</button>
+      </form>
+      <ul class="events"><% events.forEach(e => { %><li><time><%= fmtDateTime(e.created_at) %></time> <%= e.message %> <% if (!e.visible_to_client) { %><small class="muted">(interne)</small><% } %></li><% }) %></ul>
+    </div>
+  </div>
+
+  <div>
+    <form method="post" action="/admin/projets/<%= p.id %>/evaluation" class="card form">
+      <h2>Évaluation du plan</h2>
+      <div class="grid2">
+        <label>Volume d'heures estimé<input type="number" step="any" min="0" name="est_hours" value="<%= p.est_hours ?? '' %>"></label>
+        <label>Complexité (1 à 5)
+          <select name="complexity"><option value="">—</option>
+            <% [1,2,3,4,5].forEach(n => { %><option <%= p.complexity === n ? 'selected' : '' %>><%= n %></option><% }) %>
+          </select></label>
+      </div>
+      <label>Descriptif envoyé aux sous-traitants <small class="muted">(aucune info client !)</small>
+        <textarea name="supplier_brief" rows="7"><%= brief %></textarea></label>
+      <button class="btn">Enregistrer et recalculer la présélection</button>
+    </form>
+
+    <form method="post" action="/admin/projets/<%= p.id %>/consultations" class="card form" id="matching">
+      <h2>Présélection des sous-traitants</h2>
+      <p class="hint">Cochés d'office : les sous-traitants dont toutes les conditions sont compatibles. Vous pouvez en cocher d'autres.</p>
+      <% if (!candidates.length) { %><p class="muted">Aucun autre sous-traitant actif. <a href="/admin/sous-traitants/nouveau">En ajouter</a></p><% } %>
+      <ul class="candidates">
+      <% candidates.forEach(s => { %>
+        <li class="<%= s.match ? 'match' : 'nomatch' %>">
+          <label class="check"><input type="checkbox" name="suppliers" value="<%= s.id %>" <%= s.match ? 'checked' : '' %>>
+            <strong><%= s.company %></strong> <small class="muted"><%= s.country || SUPPLIER_REGIONS[s.region] %> · <%= s.source === 'self' ? 'inscrit' : 'base' %></small></label>
+          <ul class="checks-list"><% s.checks.forEach(c => { %><li class="<%= c.ok === true ? 'ok' : c.ok === false ? 'ko' : 'na' %>"><%= c.label %></li><% }) %></ul>
+        </li>
+      <% }) %>
+      </ul>
+      <% if (candidates.length) { %><button class="btn btn-primary">Envoyer la consultation anonymisée</button><% } %>
+    </form>
+
+    <div class="card" id="consultations">
+      <h2>Consultations envoyées</h2>
+      <% if (!consultations.length) { %><p class="muted">Aucune pour le moment.</p><% } else { %>
+      <table>
+        <thead><tr><th>Sous-traitant</th><th>Statut</th><th>Prix</th><th>Délai</th></tr></thead>
+        <tbody><% consultations.forEach(c => { %>
+          <tr><td><a href="/admin/sous-traitants/<%= c.supplier_id %>"><%= c.company %></a></td>
+            <td><span class="status status-<%= c.status %>"><%= CONSULTATION_STATUS[c.status] %></span></td>
+            <td><%= c.price || '' %></td><td><%= c.lead_time || '' %></td></tr>
+          <% if (c.comment) { %><tr class="sub"><td colspan="4" class="pre"><%= c.comment %></td></tr><% } %>
+        <% }) %></tbody>
+      </table>
+      <% } %>
+    </div>
+
+    <div class="card form" id="etapes">
+      <h2>Étapes client</h2>
+      <% if (p.step <= 2) { %>
+      <form method="post" action="/admin/projets/<%= p.id %>/precisions">
+        <label>2 · Demander des précisions au client<textarea name="clarification_request" rows="3" required><%= p.step === 2 && !p.clarification_answer ? p.clarification_request : '' %></textarea></label>
+        <button class="btn btn-small">Envoyer la question</button>
+      </form>
+      <% } %>
+      <% if (p.step <= 3) { %>
+      <form method="post" action="/admin/projets/<%= p.id %>/devis">
+        <h3>3 · Devis client <%= p.step === 3 ? '(envoyé – en attente de validation)' : '' %></h3>
+        <div class="grid2">
+          <label>Prix<input name="quote_price" required value="<%= p.quote_price || '' %>"></label>
+          <label>Délai<input name="quote_lead_time" required value="<%= p.quote_lead_time || '' %>"></label>
+        </div>
+        <label>Commentaire<textarea name="quote_comment" rows="2"><%= p.quote_comment || '' %></textarea></label>
+        <button class="btn btn-small btn-primary"><%= p.step === 3 ? 'Renvoyer le devis' : 'Envoyer le devis au client' %></button>
+      </form>
+      <% } %>
+      <% if (p.step === 4) { %>
+      <p>Commande reçue<%= p.order_reference ? ' (réf. ' + p.order_reference + ')' : '' %>.</p>
+      <form method="post" action="/admin/projets/<%= p.id %>/production"><button class="btn btn-primary">5 · Lancer la production</button></form>
+      <% } %>
+      <% if (p.step === 5) { %>
+      <form method="post" action="/admin/projets/<%= p.id %>/expedition">
+        <label>Infos d'expédition (transporteur, n° de suivi)<input name="tracking_info"></label>
+        <button class="btn btn-primary">6 · Marquer comme expédié</button>
+      </form>
+      <% } %>
+      <% if (p.step === 6) { %><p>✓ Projet expédié<%= p.tracking_info ? ' – ' + p.tracking_info : '' %>.</p><% } %>
+    </div>
+  </div>
+</div>
+<%- include('../partials/foot') %>

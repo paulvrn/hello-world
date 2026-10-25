@@ -1,0 +1,11 @@
+<ol class="timeline">
+  <% timeline(project).forEach(s => { %>
+  <li class="step step-<%= s.state %>">
+    <span class="dot"><%= s.state === 'done' ? '✓' : s.state === 'skipped' ? '–' : s.n %></span>
+    <span class="step-label"><%= s.label %></span>
+    <span class="step-state"><%= {
+      done: 'Terminé', current: 'En cours', action: 'Action requise', skipped: 'Non nécessaire',
+      todo: s.optional ? 'Optionnel' : 'À venir' }[s.state] %></span>
+  </li>
+  <% }) %>
+</ol>

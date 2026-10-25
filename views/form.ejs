@@ -1,0 +1,68 @@
+<%- include('partials/head', { title: 'Soumettre un projet' }) %>
+<% const v = (k) => values[k] == null ? '' : values[k]; %>
+<section class="hero">
+  <h1>Confiez-nous la fabrication de vos faisceaux et câblages filaires</h1>
+  <p>Déposez votre plan et votre nomenclature : nous consultons pour vous les sous-traitants qualifiés adaptés à votre besoin et vous accompagnons jusqu'à la livraison.</p>
+</section>
+
+<%- include('partials/errors', { errors }) %>
+
+<form method="post" action="/projets" enctype="multipart/form-data" class="card form">
+  <h2><span class="num">1</span> Votre projet</h2>
+  <label>Désignation du projet / du faisceau *<input name="title" required value="<%= v('title') %>" placeholder="ex. Faisceau principal armoire de commande"></label>
+
+  <div class="grid2">
+    <label>Plan(s) * <small class="muted">PDF, DXF, DWG…</small><input type="file" name="plan" multiple required></label>
+    <label>Nomenclature * <small class="muted">Excel, CSV, PDF…</small><input type="file" name="bom" multiple required></label>
+  </div>
+
+  <h2><span class="num">2</span> Votre besoin</h2>
+  <div class="grid2">
+    <label>Quantité *<input type="number" name="quantity" min="1" required value="<%= v('quantity') %>"></label>
+    <label>Délai souhaité<input type="date" name="desired_deadline" value="<%= v('desired_deadline') %>"></label>
+    <label>Prix cible <small class="muted">(unitaire ou global)</small><input name="target_price" value="<%= v('target_price') %>" placeholder="ex. 45 € HT / pièce"></label>
+  </div>
+
+  <fieldset>
+    <legend>Lieu de fabrication souhaité *</legend>
+    <div class="choices">
+      <% Object.entries(REGIONS).forEach(([k, l]) => { %>
+      <label class="choice"><input type="radio" name="region" value="<%= k %>" required <%= v('region') === k ? 'checked' : '' %>><span><%= l %></span></label>
+      <% }) %>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Maturité du produit *</legend>
+    <div class="choices">
+      <% Object.entries(MATURITIES).forEach(([k, l]) => { %>
+      <label class="choice"><input type="radio" name="maturity" value="<%= k %>" required <%= v('maturity') === k ? 'checked' : '' %>><span><%= l %></span></label>
+      <% }) %>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Dans quel cadre nous confiez-vous ce projet ? *</legend>
+    <div class="choices">
+      <% Object.entries(CONTEXTS).forEach(([k, l]) => { %>
+      <label class="choice"><input type="radio" name="context" value="<%= k %>" required <%= v('context') === k ? 'checked' : '' %>><span><%= l %></span></label>
+      <% }) %>
+    </div>
+  </fieldset>
+
+  <label>Autres précisions <small class="muted">(normes, tests, conditionnement, contraintes…)</small>
+    <textarea name="notes" rows="4"><%= v('notes') %></textarea></label>
+  <label>Autres documents <small class="muted">(cahier des charges, photos, gamme de test…)</small><input type="file" name="other" multiple></label>
+
+  <h2><span class="num">3</span> Vos coordonnées</h2>
+  <div class="grid2">
+    <label>Société *<input name="contact_company" required value="<%= v('contact_company') %>"></label>
+    <label>Nom et prénom *<input name="contact_name" required value="<%= v('contact_name') %>"></label>
+    <label>E-mail professionnel *<input type="email" name="contact_email" required value="<%= v('contact_email') %>"></label>
+    <label>Téléphone<input name="contact_phone" value="<%= v('contact_phone') %>"></label>
+  </div>
+
+  <p class="hint">🔒 Vos coordonnées ne sont jamais communiquées aux sous-traitants : ils ne reçoivent que des documents anonymisés.</p>
+  <button class="btn btn-primary btn-large">Envoyer ma demande</button>
+</form>
+<%- include('partials/foot') %>

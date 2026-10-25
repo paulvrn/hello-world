@@ -1,0 +1,78 @@
+<%- include('partials/head', { title: project.ref }) %>
+<% if (isNew) { %>
+<section class="hero hero-success">
+  <h1>Merci, votre demande est bien envoyée !</h1>
+  <p>Un e-mail de confirmation contenant le récapitulatif de vos réponses vient d'être envoyé à <strong><%= project.contact_email %></strong>.</p>
+</section>
+<% } else { %>
+<h1>Projet <%= project.ref %> <small class="muted">– <%= project.title %></small></h1>
+<% } %>
+
+<div class="card">
+  <h2>Avancement</h2>
+  <%- include('partials/timeline', { project }) %>
+</div>
+
+<% if (project.step === 2 && !project.clarification_answer) { %>
+<div class="card card-action">
+  <h2>Nous avons besoin de quelques précisions</h2>
+  <p class="pre quote"><%= project.clarification_request %></p>
+  <form method="post" action="/suivi/<%= project.tracking_token %>/precisions" enctype="multipart/form-data">
+    <label>Votre réponse<textarea name="answer" rows="4" required></textarea></label>
+    <label>Documents complémentaires<input type="file" name="files" multiple></label>
+    <button class="btn btn-primary">Envoyer mes précisions</button>
+  </form>
+</div>
+<% } %>
+
+<% if (project.step >= 3 && project.quote_price) { %>
+<div class="card <%= project.step === 3 ? 'card-action' : '' %>">
+  <h2>Votre devis</h2>
+  <dl class="recap">
+    <dt>Prix</dt><dd><strong><%= project.quote_price %></strong></dd>
+    <dt>Délai</dt><dd><%= project.quote_lead_time %></dd>
+    <% if (project.quote_comment) { %><dt>Commentaire</dt><dd class="pre"><%= project.quote_comment %></dd><% } %>
+    <% if (project.order_reference) { %><dt>Votre n° de commande</dt><dd><%= project.order_reference %></dd><% } %>
+    <% if (project.tracking_info) { %><dt>Suivi expédition</dt><dd><%= project.tracking_info %></dd><% } %>
+  </dl>
+  <% if (project.step === 3) { %>
+  <form method="post" action="/suivi/<%= project.tracking_token %>/commande" enctype="multipart/form-data">
+    <div class="grid2">
+      <label>Votre référence de commande<input name="order_reference"></label>
+      <label>Bon de commande (optionnel)<input type="file" name="files"></label>
+    </div>
+    <button class="btn btn-primary">Valider le devis et passer commande</button>
+  </form>
+  <% } %>
+</div>
+<% } %>
+
+<% if (!user && !hasAccount) { %>
+<div class="card card-cta">
+  <div>
+    <h2>Pour continuer à suivre l'avancement et/ou faire de nouvelles demandes, créez un compte !</h2>
+    <p>Retrouvez tous vos projets au même endroit, répondez à nos questions et validez vos devis en un clic.</p>
+  </div>
+  <a class="btn btn-primary btn-large" href="/inscription?email=<%= encodeURIComponent(project.contact_email) %>">Créer mon compte</a>
+</div>
+<% } else if (!user) { %>
+<p class="center"><a href="/connexion">Connectez-vous</a> pour retrouver tous vos projets.</p>
+<% } %>
+
+<div class="card">
+  <h2>Récapitulatif de votre demande</h2>
+  <%- include('partials/recap', { project, files }) %>
+  <% if (project.clarification_answer) { %>
+  <h3>Précisions échangées</h3>
+  <p class="pre quote"><strong>Question :</strong> <%= project.clarification_request %></p>
+  <p class="pre"><strong>Votre réponse :</strong> <%= project.clarification_answer %></p>
+  <% } %>
+</div>
+
+<% if (events.length) { %>
+<div class="card">
+  <h2>Historique</h2>
+  <ul class="events"><% events.forEach(e => { %><li><time><%= fmtDateTime(e.created_at) %></time> <%= e.message %></li><% }) %></ul>
+</div>
+<% } %>
+<%- include('partials/foot') %>

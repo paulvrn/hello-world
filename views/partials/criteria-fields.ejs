@@ -1,0 +1,34 @@
+<%# Conditions de sollicitation d'un sous-traitant ; attend `s` (valeurs) %>
+<% const ms = (s.maturities || '').split(','); const v = (x) => x == null ? '' : x; %>
+<div class="grid2">
+  <label>Société *<input name="company" required value="<%= v(s.company) %>"></label>
+  <label>Contact<input name="contact_name" value="<%= v(s.contact_name) %>"></label>
+  <label>Téléphone<input name="phone" value="<%= v(s.phone) %>"></label>
+  <label>Pays<input name="country" value="<%= v(s.country) %>" placeholder="ex. France, Tunisie, Mexique…"></label>
+  <label>Zone de fabrication *
+    <select name="region">
+      <% Object.entries(SUPPLIER_REGIONS).forEach(([k, l]) => { %><option value="<%= k %>" <%= s.region === k ? 'selected' : '' %>><%= l %></option><% }) %>
+    </select>
+  </label>
+</div>
+<label>Savoir-faire / équipements<textarea name="capabilities" rows="3" placeholder="Sertissage, surmoulage, test électrique, normes IPC/WHMA-A-620, IRIS…"><%= v(s.capabilities) %></textarea></label>
+<fieldset>
+  <legend>Conditions auxquelles vous souhaitez être consulté <small class="muted">(laisser vide = pas de limite)</small></legend>
+  <div class="grid3">
+    <label>Volume d'heures du projet, min<input type="number" step="any" min="0" name="min_hours" value="<%= v(s.min_hours) %>"></label>
+    <label>Volume d'heures, max<input type="number" step="any" min="0" name="max_hours" value="<%= v(s.max_hours) %>"></label>
+    <span></span>
+    <label>Complexité min (1–5)<input type="number" min="1" max="5" name="min_complexity" value="<%= v(s.min_complexity) %>"></label>
+    <label>Complexité max (1–5)<input type="number" min="1" max="5" name="max_complexity" value="<%= v(s.max_complexity) %>"></label>
+    <span></span>
+    <label>Quantité min<input type="number" min="0" name="min_quantity" value="<%= v(s.min_quantity) %>"></label>
+    <label>Quantité max<input type="number" min="0" name="max_quantity" value="<%= v(s.max_quantity) %>"></label>
+  </div>
+  <div class="checks">
+    <span>Types de série acceptés * :</span>
+    <% Object.entries(MATURITIES).forEach(([k, l]) => { %>
+    <label class="check"><input type="checkbox" name="maturities" value="<%= k %>" <%= ms.includes(k) ? 'checked' : '' %>> <%= l %></label>
+    <% }) %>
+  </div>
+  <p class="hint">Complexité : 1 = faisceau simple (quelques fils, connecteurs standards) · 5 = faisceau très complexe (nombreuses dérivations, blindages, surmoulage, contraintes aéro/défense).</p>
+</fieldset>

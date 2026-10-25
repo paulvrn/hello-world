@@ -1,0 +1,2 @@
+company;contact_name;email;phone;country;region;capabilities;min_hours;max_hours;min_complexity;max_complexity;min_quantity;max_quantity;maturities
+Câblage Exemple SARL;Jean Dupont;contact@exemple.fr;+33 1 23 45 67 89;France;france;Sertissage, test électrique;10;500;1;4;1;5000;proto,first_series,mature

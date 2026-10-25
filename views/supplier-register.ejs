@@ -1,0 +1,17 @@
+<%- include('partials/head', { title: 'Inscription sous-traitant' }) %>
+<section class="hero">
+  <h1>Devenez sous-traitant partenaire</h1>
+  <p>Recevez des consultations de câblage filaire correspondant exactement à vos capacités : zone, volumes, complexité, type de série.</p>
+</section>
+<%- include('partials/errors', { errors }) %>
+<form method="post" action="/sous-traitants/inscription" class="card form">
+  <h2>Votre compte</h2>
+  <div class="grid2">
+    <label>E-mail *<input type="email" name="email" required value="<%= values.email || '' %>"></label>
+    <label>Mot de passe * <small class="muted">(8 caractères min.)</small><input type="password" name="password" minlength="8" required></label>
+  </div>
+  <h2>Votre entreprise</h2>
+  <%- include('partials/criteria-fields', { s: values }) %>
+  <button class="btn btn-primary btn-large">Créer mon compte partenaire</button>
+</form>
+<%- include('partials/foot') %>

@@ -1,0 +1,30 @@
+<%- include('partials/head', { title: 'Espace sous-traitant' }) %>
+<h1>Espace sous-traitant</h1>
+<% if (!user.email_verified) { %>
+<div class="flash flash-info">Pensez à confirmer votre adresse e-mail via le lien envoyé à <%= user.email %>.</div>
+<% } %>
+<div class="card">
+  <h2>Consultations reçues</h2>
+  <% if (!consultations.length) { %>
+  <p class="muted">Aucune consultation pour le moment. Vous serez prévenu par e-mail dès qu'un projet correspond à vos conditions.</p>
+  <% } else { %>
+  <table>
+    <thead><tr><th>Réf.</th><th>Quantité</th><th>Reçue le</th><th>Statut</th><th></th></tr></thead>
+    <tbody>
+    <% consultations.forEach(c => { %>
+      <tr><td><%= c.ref %></td><td><%= c.quantity %></td><td><%= fmtDate(c.sent_at) %></td>
+        <td><span class="status status-<%= c.status %>"><%= CONSULTATION_STATUS[c.status] %></span></td>
+        <td><a href="/consultation/<%= c.token %>">Ouvrir</a></td></tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+<% if (supplier) { %>
+<form method="post" action="/fournisseur/profil" class="card form">
+  <h2>Mon profil et mes conditions de consultation</h2>
+  <%- include('partials/criteria-fields', { s: supplier }) %>
+  <button class="btn btn-primary">Enregistrer</button>
+</form>
+<% } %>
+<%- include('partials/foot') %>

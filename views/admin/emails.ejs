@@ -1,0 +1,10 @@
+<%- include('../partials/head', { title: 'E-mails', wide: true }) %>
+<h1>E-mails envoyés</h1>
+<p class="hint">Sans configuration SMTP (variable SMTP_URL), les e-mails ne partent pas réellement : ils sont seulement journalisés ici.</p>
+<% emails.forEach(e => { %>
+<details class="card">
+  <summary><time><%= fmtDateTime(e.created_at) %></time> · <strong><%= e.subject %></strong> → <%= e.to_addr %> <span class="status status-<%= e.status === 'error' ? 'declined' : 'quoted' %>"><%= e.status %></span></summary>
+  <pre><%= e.body %></pre><% if (e.error) { %><p class="flash flash-error"><%= e.error %></p><% } %>
+</details>
+<% }) %>
+<%- include('../partials/foot') %>

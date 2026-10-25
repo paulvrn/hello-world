@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= typeof title !== 'undefined' ? title + ' · ' : '' %>Câblage sur mesure</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">⚡ Câblage<span>sur mesure</span></a>
+  <nav>
+    <% if (!user) { %>
+      <a href="/">Soumettre un projet</a>
+      <a href="/sous-traitants/inscription">Vous êtes sous-traitant ?</a>
+      <a href="/connexion" class="btn btn-small">Connexion</a>
+    <% } else if (user.role === 'admin') { %>
+      <a href="/admin">Projets<% if (unseenCount) { %> <span class="badge"><%= unseenCount %></span><% } %></a>
+      <a href="/admin/sous-traitants">Sous-traitants</a>
+      <a href="/admin/emails">E-mails</a>
+    <% } else if (user.role === 'client') { %>
+      <a href="/mon-espace">Mes projets</a>
+      <a href="/">Nouvelle demande</a>
+    <% } else { %>
+      <a href="/fournisseur">Mon espace sous-traitant</a>
+    <% } %>
+    <% if (user) { %>
+      <form method="post" action="/deconnexion" class="inline"><button class="link">Déconnexion</button></form>
+    <% } %>
+  </nav>
+</header>
+<main class="<%= typeof wide !== 'undefined' && wide ? 'wide' : '' %>">
+<% if (flash) { %><div class="flash flash-<%= flash.type %>"><%= flash.message %></div><% } %>

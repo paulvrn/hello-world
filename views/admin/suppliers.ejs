@@ -1,0 +1,34 @@
+<%- include('../partials/head', { title: 'Sous-traitants', wide: true }) %>
+<div class="row-between">
+  <h1>Sous-traitants</h1>
+  <a class="btn btn-primary" href="/admin/sous-traitants/nouveau">+ Ajouter</a>
+</div>
+<form method="post" action="/admin/sous-traitants-import" enctype="multipart/form-data" class="card row mini">
+  <strong>Importer votre base (CSV)</strong>
+  <input type="file" name="csv" accept=".csv,text/csv" required>
+  <button class="btn btn-small">Importer</button>
+  <a href="/modele-sous-traitants.csv" download>Télécharger le modèle</a>
+</form>
+<div class="card">
+<% if (!suppliers.length) { %><p class="muted">Aucun sous-traitant. Importez votre base ou ajoutez-en un.</p><% } else { %>
+<table>
+  <thead><tr><th>Société</th><th>Zone</th><th>Heures</th><th>Complexité</th><th>Quantités</th><th>Séries</th><th>Origine</th><th>Consult.</th></tr></thead>
+  <tbody>
+  <% const r = (a, b) => a == null && b == null ? 'toutes' : `${a ?? '…'} – ${b ?? '…'}`; %>
+  <% suppliers.forEach(s => { %>
+    <tr class="<%= s.active ? '' : 'inactive' %>">
+      <td><a href="/admin/sous-traitants/<%= s.id %>"><%= s.company %></a><br><small class="muted"><%= s.email %></small></td>
+      <td><%= s.country || SUPPLIER_REGIONS[s.region] %></td>
+      <td><%= r(s.min_hours, s.max_hours) %></td>
+      <td><%= r(s.min_complexity, s.max_complexity) %></td>
+      <td><%= r(s.min_quantity, s.max_quantity) %></td>
+      <td><%= s.maturities.split(',').filter(Boolean).map(m => MATURITIES[m].split(' ')[0]).join(', ') %></td>
+      <td><%= { admin: 'saisi', import: 'importé', self: 'inscrit' }[s.source] %><%= s.user_id ? ' · compte' : '' %></td>
+      <td><%= s.consulted %><%= s.quotes ? ` (${s.quotes} offre${s.quotes > 1 ? 's' : ''})` : '' %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+<% } %>
+</div>
+<%- include('../partials/foot') %>

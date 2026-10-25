@@ -1,0 +1,12 @@
+<%- include('partials/head', { title: 'Connexion' }) %>
+<div class="narrow">
+  <h1>Connexion</h1>
+  <% if (error) { %><div class="flash flash-error"><%= error %></div><% } %>
+  <form method="post" action="/connexion" class="card form">
+    <label>E-mail<input type="email" name="email" required value="<%= email || '' %>"></label>
+    <label>Mot de passe<input type="password" name="password" required></label>
+    <button class="btn btn-primary">Se connecter</button>
+  </form>
+  <p class="center">Pas encore de compte ? <a href="/inscription">Client</a> · <a href="/sous-traitants/inscription">Sous-traitant</a></p>
+</div>
+<%- include('partials/foot') %>

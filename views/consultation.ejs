@@ -1,0 +1,41 @@
+<%- include('partials/head', { title: 'Consultation ' + project.ref }) %>
+<h1>Consultation <%= project.ref %></h1>
+<p class="muted">Bonjour <%= supplier.company %>, voici le projet de câblage pour lequel nous sollicitons votre offre.</p>
+<div class="card">
+  <h2>Le besoin</h2>
+  <p class="pre"><%= project.supplier_brief %></p>
+  <h3>Documents</h3>
+  <% if (!files.length) { %><p class="muted">Les documents seront mis à disposition prochainement.</p><% } %>
+  <ul class="files">
+    <% files.forEach(f => { %>
+    <li><span class="tag"><%= FILE_KINDS[f.kind] %></span> <a href="/consultation/<%= consultation.token %>/fichiers/<%= f.id %>"><%= f.name %></a> <small class="muted"><%= fmtSize(f.size) %></small></li>
+    <% }) %>
+  </ul>
+  <p class="hint">Documents confidentiels : merci de ne pas les diffuser.</p>
+</div>
+
+<% if (consultation.status === 'quoted' || consultation.status === 'declined') { %>
+<div class="card">
+  <h2>Votre réponse</h2>
+  <% if (consultation.status === 'quoted') { %>
+  <dl class="recap"><dt>Prix</dt><dd><%= consultation.price %></dd><dt>Délai</dt><dd><%= consultation.lead_time %></dd>
+  <% if (consultation.comment) { %><dt>Commentaire</dt><dd class="pre"><%= consultation.comment %></dd><% } %></dl>
+  <% } else { %><p>Vous avez décliné cette consultation.</p><% } %>
+</div>
+<% } else if (project.closed) { %>
+<div class="card"><p>Cette consultation est clôturée.</p></div>
+<% } else { %>
+<form method="post" action="/consultation/<%= consultation.token %>" class="card form">
+  <h2>Votre offre</h2>
+  <div class="grid2">
+    <label>Prix *<input name="price" placeholder="ex. 38 € HT / pièce, outillage 1 200 €"></label>
+    <label>Délai *<input name="lead_time" placeholder="ex. 4 semaines après commande"></label>
+  </div>
+  <label>Commentaire / questions<textarea name="comment" rows="3"></textarea></label>
+  <div class="row">
+    <button class="btn btn-primary" name="action" value="quote">Envoyer mon offre</button>
+    <button class="btn" name="action" value="decline" formnovalidate>Décliner</button>
+  </div>
+</form>
+<% } %>
+<%- include('partials/foot') %>

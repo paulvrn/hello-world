@@ -1,0 +1,16 @@
+<%- include('partials/head', { title: 'Créer un compte' }) %>
+<% const v = (k) => values[k] == null ? '' : values[k]; %>
+<div class="narrow">
+  <h1>Créer votre compte client</h1>
+  <p class="muted">Suivez l'avancement de vos projets et faites de nouvelles demandes en quelques clics.</p>
+  <%- include('partials/errors', { errors }) %>
+  <form method="post" action="/inscription" class="card form">
+    <label>E-mail *<input type="email" name="email" required value="<%= v('email') %>"></label>
+    <label>Nom et prénom<input name="name" value="<%= v('name') %>"></label>
+    <label>Société<input name="company" value="<%= v('company') %>"></label>
+    <label>Mot de passe * <small class="muted">(8 caractères minimum)</small><input type="password" name="password" minlength="8" required></label>
+    <button class="btn btn-primary">Créer mon compte</button>
+  </form>
+  <p class="center">Déjà inscrit ? <a href="/connexion">Se connecter</a> · Vous êtes sous-traitant ? <a href="/sous-traitants/inscription">Inscription partenaire</a></p>
+</div>
+<%- include('partials/foot') %>
