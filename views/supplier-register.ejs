@@ -12,6 +12,8 @@
   </div>
   <h2>Votre entreprise</h2>
   <%- include('partials/criteria-fields', { s: values }) %>
+  <%- include('partials/nda') %>
+  <label class="check consent"><input type="checkbox" name="nda" value="1" required <%= values.nda === '1' ? 'checked' : '' %>> J'accepte cet engagement au nom de ma société. *</label>
   <button class="btn btn-primary btn-large">Créer mon compte partenaire</button>
 </form>
 <%- include('partials/foot') %>

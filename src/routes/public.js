@@ -2,7 +2,7 @@ const express = require('express');
 const { get, all, run, transaction, addEvent } = require('../db');
 const { hashPassword, verifyPassword, token } = require('../auth');
 const { upload, saveProjectFiles } = require('../files');
-const { REGIONS, MATURITIES, CONTEXTS } = require('../labels');
+const { REGIONS, MATURITIES, CONTEXTS, QUALITY_STANDARDS, TESTS, CERTIFICATIONS, COMPONENT_SUPPLY, listOf } = require('../labels');
 const { flash } = require('../helpers');
 const { notify } = require('../notify');
 
@@ -34,6 +34,9 @@ function validateProject(b, files) {
   if (!CONTEXTS[b.context]) errors.push('Merci de préciser le cadre de la demande.');
   if (!files.plan?.length) errors.push('Merci de joindre au moins un plan.');
   if (!files.bom?.length) errors.push('Merci de joindre la nomenclature.');
+  if (b.quality_standard && !QUALITY_STANDARDS[b.quality_standard]) errors.push('Norme de fabrication inconnue.');
+  if (!COMPONENT_SUPPLY[b.components_supply]) errors.push('Merci de préciser qui approvisionne les composants.');
+  if (b.confidentiality_consent !== '1') errors.push('Merci d\'autoriser la consultation de partenaires de fabrication sous accord de confidentialité.');
   return errors;
 }
 
@@ -51,13 +54,18 @@ router.post('/projets', projectUpload, async (req, res) => {
 
   const project = transaction(() => {
     const ref = nextRef();
+    const text = (k) => b[k]?.trim() || null;
+    const list = (k, dict) => listOf([].concat(b[k] || []).join(','), dict).join(',') || null;
     const { lastInsertRowid } = run(`INSERT INTO projects
       (ref, title, client_user_id, contact_company, contact_name, contact_email, contact_phone, region, quantity,
-       maturity, context, desired_deadline, target_price, notes, tracking_token)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       maturity, context, desired_deadline, target_price, notes, quality_standard, tests_required, certifications_required,
+       lot_cadence, components_supply, delivery_place, regulatory_constraints, confidentiality_consent_at, tracking_token)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
       ref, b.title.trim(), req.user?.role === 'client' ? req.user.id : null, b.contact_company.trim(), b.contact_name.trim(),
-      b.contact_email.trim(), b.contact_phone?.trim() || null, b.region, Math.round(Number(b.quantity)), b.maturity, b.context,
-      b.desired_deadline || null, b.target_price?.trim() || null, b.notes?.trim() || null, token());
+      b.contact_email.trim(), text('contact_phone'), b.region, Math.round(Number(b.quantity)), b.maturity, b.context,
+      b.desired_deadline || null, text('target_price'), text('notes'), b.quality_standard || null,
+      list('tests_required', TESTS), list('certifications_required', CERTIFICATIONS), text('lot_cadence'),
+      b.components_supply, text('delivery_place'), text('regulatory_constraints'), token());
     return get('SELECT * FROM projects WHERE id = ?', lastInsertRowid);
   });
   for (const kind of ['plan', 'bom', 'other']) await saveProjectFiles(project.id, files[kind], kind);
@@ -170,7 +178,8 @@ function linkImportedSupplier(user) {
     run('UPDATE consultations SET supplier_id = ? WHERE supplier_id = ?', existing.id, own.id);
     run('DELETE FROM suppliers WHERE id = ?', own.id);
     const fields = ['company', 'contact_name', 'phone', 'country', 'region', 'capabilities', 'min_hours', 'max_hours',
-      'min_complexity', 'max_complexity', 'min_quantity', 'max_quantity', 'maturities'];
+      'min_complexity', 'max_complexity', 'min_quantity', 'max_quantity', 'maturities', 'processes', 'certifications',
+      'sources_components', 'nda_accepted_at'];
     run(`UPDATE suppliers SET user_id = ?, ${fields.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`,
       user.id, ...fields.map((f) => own[f]), existing.id);
   } else {

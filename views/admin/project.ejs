@@ -80,18 +80,21 @@
 
     <form method="post" action="/admin/projets/<%= p.id %>/consultations" class="card form" id="matching">
       <h2>Présélection des sous-traitants</h2>
-      <p class="hint">Cochés d'office : les sous-traitants dont toutes les conditions sont compatibles. Vous pouvez en cocher d'autres.</p>
+      <p class="hint">Classés par score de correspondance. Cochés d'office : les <%= waveSize %> meilleurs (score ≥ 75 %) pour une première vague ; élargissez ensuite si les réponses manquent. Panel limité à <%= maxPanel %> fabricants (<%= consultations.length %> déjà consulté<%= consultations.length > 1 ? 's' : '' %>).</p>
       <% if (!candidates.length) { %><p class="muted">Aucun autre sous-traitant actif. <a href="/admin/sous-traitants/nouveau">En ajouter</a></p><% } %>
       <ul class="candidates">
       <% candidates.forEach(s => { %>
         <li class="<%= s.match ? 'match' : 'nomatch' %>">
-          <label class="check"><input type="checkbox" name="suppliers" value="<%= s.id %>" <%= s.match ? 'checked' : '' %>>
-            <strong><%= s.company %></strong> <small class="muted"><%= s.country || SUPPLIER_REGIONS[s.region] %> · <%= s.source === 'self' ? 'inscrit' : 'base' %></small></label>
+          <label class="check"><input type="checkbox" name="suppliers" value="<%= s.id %>" <%= checked.has(s.id) ? 'checked' : '' %>>
+            <span class="score <%= s.score >= 75 ? 'high' : s.score >= 50 ? 'mid' : '' %>"><%= s.score %> %</span>&nbsp;
+            <strong><%= s.company %></strong> <small class="muted"><%= s.country || SUPPLIER_REGIONS[s.region] %> · <%= s.source === 'self' ? 'inscrit' : 'base' %> · <%= s.statsLabel %><%= s.nda_accepted_at ? '' : ' · NDA à accepter' %></small></label>
           <ul class="checks-list"><% s.checks.forEach(c => { %><li class="<%= c.ok === true ? 'ok' : c.ok === false ? 'ko' : 'na' %>"><%= c.label %></li><% }) %></ul>
         </li>
       <% }) %>
       </ul>
-      <% if (candidates.length) { %><button class="btn btn-primary">Envoyer la consultation anonymisée</button><% } %>
+      <% if (candidates.length) { %>
+      <label class="check"><input type="checkbox" name="widen" value="1"> Élargir volontairement au-delà de <%= maxPanel %> fabricants (projet atypique)</label>
+      <button class="btn btn-primary">Envoyer la consultation anonymisée</button><% } %>
     </form>
 
     <div class="card" id="consultations">
@@ -104,9 +107,48 @@
             <td><span class="status status-<%= c.status %>"><%= CONSULTATION_STATUS[c.status] %></span></td>
             <td><%= c.price || '' %></td><td><%= c.lead_time || '' %></td></tr>
           <% if (c.comment) { %><tr class="sub"><td colspan="4" class="pre"><%= c.comment %></td></tr><% } %>
+          <% if (c.feedback) { %><tr class="sub"><td colspan="4" class="pre muted">Retour envoyé : <%= c.feedback %></td></tr><% } %>
         <% }) %></tbody>
       </table>
+      <% const offers = consultations.filter(c => ['quoted', 'won', 'lost'].includes(c.status)); %>
+      <% if (offers.length) { %>
+      <form method="post" action="/admin/projets/<%= p.id %>/issue" class="form">
+        <h3>Issue de la consultation</h3>
+        <p class="hint">Indiquez l'offre retenue et donnez un retour aux autres (écart de prix approximatif, délai, projet abandonné…) : c'est rare dans le métier et très apprécié.</p>
+        <label class="check"><input type="radio" name="winner" value="" <%= offers.some(c => c.status === 'won') ? '' : 'checked' %>> Aucune offre retenue / projet sans suite</label>
+        <% offers.forEach(c => { %>
+        <div class="outcome">
+          <label class="check"><input type="radio" name="winner" value="<%= c.id %>" <%= c.status === 'won' ? 'checked' : '' %>> <span>Retenir <strong><%= c.company %></strong> (<%= c.price %>)</span></label>
+          <input name="feedback_<%= c.id %>" value="<%= c.feedback || '' %>" placeholder="Retour à <%= c.company %>, ex. « offre ~15 % au-dessus de l'offre retenue »">
+        </div>
+        <% }) %>
+        <label class="check"><input type="checkbox" name="notify" value="1" checked> Envoyer le résultat et le retour par e-mail</label>
+        <button class="btn btn-small">Enregistrer l'issue</button>
+      </form>
       <% } %>
+      <% } %>
+    </div>
+
+    <div class="card form" id="questions">
+      <h2>Questions des sous-traitants</h2>
+      <p class="hint">Répondez vous-même ou relayez au client (étape « précisions »). Chaque réponse est envoyée à tous les sous-traitants consultés, sans dire qui a posé la question.</p>
+      <% if (!questions.length) { %><p class="muted">Aucune question.</p><% } %>
+      <ul class="qa">
+        <% questions.forEach(q => { %>
+        <li><div class="q"><%= q.question %> <small class="muted">– <%= q.company || 'vous' %>, <%= fmtDateTime(q.created_at) %></small></div>
+          <% if (q.answer) { %><div class="a"><%= q.answer %></div>
+          <% } else { %>
+          <form method="post" action="/admin/projets/<%= p.id %>/questions/<%= q.id %>" class="mini">
+            <textarea name="answer" rows="2" required placeholder="Réponse partagée à tous les consultés"></textarea>
+            <button class="btn btn-small">Répondre à tous</button>
+          </form>
+          <% } %></li>
+        <% }) %>
+      </ul>
+      <form method="post" action="/admin/projets/<%= p.id %>/questions" class="mini">
+        <input name="question" placeholder="Ajouter une précision à diffuser (question / réponse)">
+        <button class="btn btn-small">Ajouter</button>
+      </form>
     </div>
 
     <div class="card form" id="etapes">

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { evaluate } = require('../src/matching');
+const { evaluate, preselect } = require('../src/matching');
 
 const supplier = {
   active: 1, region: 'france', country: 'France', maturities: 'proto,first_series',
@@ -29,4 +29,29 @@ test("heures et complexité non encore évaluées ne bloquent pas la présélect
 test('« peu importe » accepte toutes les zones ; un sous-traitant inactif est exclu', () => {
   assert.equal(evaluate({ ...project, region: 'any' }, { ...supplier, region: 'other' }).match, true);
   assert.equal(evaluate(project, { ...supplier, active: 0 }).match, false);
+});
+
+test('le score mesure la part des critères évaluables remplis', () => {
+  assert.equal(evaluate(project, supplier).score, 100);
+  // 1 critère manqué sur 5 → 80 %
+  assert.equal(evaluate({ ...project, quantity: 5000 }, supplier).score, 80);
+  assert.equal(evaluate(project, { ...supplier, active: 0 }).score, 0);
+});
+
+test('certifications exigées et approvisionnement des composants', () => {
+  const p = { ...project, certifications_required: 'iso9001,en9100', components_supply: 'supplier' };
+  const r = evaluate(p, { ...supplier, certifications: 'iso9001', sources_components: 0 });
+  assert.equal(r.match, false);
+  assert.ok(r.checks.some((c) => c.ok === false && c.label.includes('EN 9100')));
+  assert.equal(evaluate(p, { ...supplier, certifications: 'iso9001,en9100', sources_components: 1 }).match, true);
+  // Composants fournis par le client : critère non évalué
+  assert.equal(evaluate({ ...p, components_supply: 'customer' }, { ...supplier, certifications: 'iso9001,en9100' }).match, true);
+});
+
+test('présélection : les 3 meilleurs scores ≥ 75 %, dans la limite de 5 consultés', () => {
+  const c = (id, score) => ({ id, score, active: 1 });
+  const candidates = [c(1, 100), c(2, 60), c(3, 80), c(4, 100), c(5, 75), c(6, 90)];
+  assert.deepEqual(preselect(candidates, 0), [1, 4, 6]);
+  assert.deepEqual(preselect(candidates, 3), [1, 4]);
+  assert.deepEqual(preselect(candidates, 5), []);
 });

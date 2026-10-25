@@ -1,4 +1,10 @@
-const { REGIONS, MATURITIES } = require('./labels');
+const { REGIONS, MATURITIES, CERTIFICATIONS, listOf } = require('./labels');
+
+// Consultation par vagues : 3 fabricants d'abord, 5 au plus sauf élargissement volontaire.
+const WAVE_SIZE = Number(process.env.CONSULT_WAVE_SIZE) || 3;
+const MAX_PANEL = Number(process.env.CONSULT_MAX_PANEL) || 5;
+// Score minimal (en %) pour être coché d'office.
+const MIN_SCORE = 75;
 
 // Régions de fabrication acceptables pour chaque préférence client.
 const ACCEPTED_SUPPLIER_REGIONS = {
@@ -23,8 +29,9 @@ function rangeLabel(min, max, unit = '') {
 
 /**
  * Évalue l'adéquation entre un projet et un sous-traitant.
- * Retourne { match, checks } où chaque check vaut { ok, label } (ok = null : critère non évaluable).
- * Les critères non encore renseignés par l'admin (heures, complexité) ne sont pas bloquants.
+ * Retourne { match, score, checks } où chaque check vaut { ok, label } (ok = null : critère non évaluable).
+ * match = tous les critères évaluables sont remplis ; score = part (en %) des critères évaluables remplis.
+ * Les critères non encore renseignés par l'admin (heures, complexité) ne comptent pas.
  */
 function evaluate(project, supplier) {
   const checks = [];
@@ -64,8 +71,38 @@ function evaluate(project, supplier) {
     });
   }
 
+  const required = listOf(project.certifications_required, CERTIFICATIONS);
+  if (required.length) {
+    const has = listOf(supplier.certifications, CERTIFICATIONS);
+    const missing = required.filter((c) => !has.includes(c));
+    checks.push({
+      ok: !missing.length,
+      label: missing.length ? `Certifications manquantes : ${missing.map((c) => CERTIFICATIONS[c]).join(', ')}`
+        : `Certifications : ${required.map((c) => CERTIFICATIONS[c]).join(', ')}`,
+    });
+  }
+
+  if (project.components_supply === 'supplier' || project.components_supply === 'mixed') {
+    checks.push({ ok: Boolean(supplier.sources_components), label: 'Approvisionnement des composants' });
+  }
+
+  const evaluable = checks.filter((c) => c.ok !== null);
+  const score = evaluable.length ? Math.round((100 * evaluable.filter((c) => c.ok).length) / evaluable.length) : 100;
   const match = Boolean(supplier.active) && checks.every((c) => c.ok !== false);
-  return { match, checks };
+  return { match, score: supplier.active ? score : 0, checks };
 }
 
-module.exports = { evaluate, ACCEPTED_SUPPLIER_REGIONS };
+/**
+ * Sous-traitants cochés d'office pour la prochaine vague : les meilleurs scores (≥ MIN_SCORE),
+ * dans la limite de la vague et du panel maximal. `candidates` porte déjà le résultat de evaluate().
+ */
+function preselect(candidates, alreadyConsulted = 0) {
+  const room = Math.max(0, Math.min(WAVE_SIZE, MAX_PANEL - alreadyConsulted));
+  return candidates
+    .filter((s) => s.active && s.score >= MIN_SCORE)
+    .sort((a, b) => b.score - a.score || (b.stats?.winRate ?? 0) - (a.stats?.winRate ?? 0))
+    .slice(0, room)
+    .map((s) => s.id);
+}
+
+module.exports = { evaluate, preselect, ACCEPTED_SUPPLIER_REGIONS, WAVE_SIZE, MAX_PANEL, MIN_SCORE };

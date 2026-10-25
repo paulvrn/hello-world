@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS projects (
   desired_deadline TEXT,
   target_price TEXT,
   notes TEXT,
+  quality_standard TEXT,
+  tests_required TEXT,
+  certifications_required TEXT,
+  lot_cadence TEXT,
+  components_supply TEXT,
+  delivery_place TEXT,
+  regulatory_constraints TEXT,
+  confidentiality_consent_at TEXT,
   -- Champs renseignés par l'administrateur à la lecture du plan
   est_hours REAL,
   complexity INTEGER CHECK (complexity BETWEEN 1 AND 5),
@@ -98,6 +106,11 @@ CREATE TABLE IF NOT EXISTS suppliers (
   min_quantity INTEGER,
   max_quantity INTEGER,
   maturities TEXT NOT NULL DEFAULT 'proto,first_series,mature',
+  processes TEXT,
+  certifications TEXT,
+  sources_components INTEGER NOT NULL DEFAULT 0,
+  -- Engagement de confidentialité et de non-contournement accepté (inscription ou première consultation)
+  nda_accepted_at TEXT,
   source TEXT NOT NULL DEFAULT 'admin' CHECK (source IN ('admin', 'import', 'self')),
   active INTEGER NOT NULL DEFAULT 1,
   admin_notes TEXT,
@@ -113,9 +126,25 @@ CREATE TABLE IF NOT EXISTS consultations (
   price TEXT,
   lead_time TEXT,
   comment TEXT,
+  -- Nombre de fabricants consultés annoncé au sous-traitant (« consultation restreinte à N »)
+  panel_size INTEGER,
+  feedback TEXT,
+  feedback_at TEXT,
   sent_at TEXT NOT NULL DEFAULT (datetime('now')),
   responded_at TEXT,
   UNIQUE (project_id, supplier_id)
+);
+
+-- Questions des sous-traitants : l'admin répond (au besoin après avoir interrogé le client),
+-- et la réponse est partagée à tous les sous-traitants consultés sur le projet.
+CREATE TABLE IF NOT EXISTS questions (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  consultation_id INTEGER REFERENCES consultations(id) ON DELETE SET NULL,
+  question TEXT NOT NULL,
+  answer TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  answered_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS emails (

@@ -1,5 +1,6 @@
 <%- include('partials/head', { title: 'Soumettre un projet' }) %>
-<% const v = (k) => values[k] == null ? '' : values[k]; %>
+<% const v = (k) => values[k] == null ? '' : values[k];
+   const has = (k, key) => [].concat(values[k] || []).join(',').split(',').includes(key); %>
 <section class="hero">
   <h1>Confiez-nous la fabrication de vos faisceaux et câblages filaires</h1>
   <p>Déposez votre plan et votre nomenclature : nous consultons pour vous les sous-traitants qualifiés adaptés à votre besoin et vous accompagnons jusqu'à la livraison.</p>
@@ -18,7 +19,8 @@
 
   <h2><span class="num">2</span> Votre besoin</h2>
   <div class="grid2">
-    <label>Quantité *<input type="number" name="quantity" min="1" required value="<%= v('quantity') %>"></label>
+    <label>Quantité totale *<input type="number" name="quantity" min="1" required value="<%= v('quantity') %>"></label>
+    <label>Cadence et taille des lots<input name="lot_cadence" value="<%= v('lot_cadence') %>" placeholder="ex. 500 / an par lots de 50"></label>
     <label>Délai souhaité<input type="date" name="desired_deadline" value="<%= v('desired_deadline') %>"></label>
     <label>Prix cible <small class="muted">(unitaire ou global)</small><input name="target_price" value="<%= v('target_price') %>" placeholder="ex. 45 € HT / pièce"></label>
   </div>
@@ -50,11 +52,51 @@
     </div>
   </fieldset>
 
-  <label>Autres précisions <small class="muted">(normes, tests, conditionnement, contraintes…)</small>
+  <h2><span class="num">3</span> Exigences de fabrication</h2>
+  <div class="grid2">
+    <label>Norme / classe de fabrication
+      <select name="quality_standard"><option value="">—</option>
+        <% Object.entries(QUALITY_STANDARDS).forEach(([k, l]) => { %><option value="<%= k %>" <%= v('quality_standard') === k ? 'selected' : '' %>><%= l %></option><% }) %>
+      </select></label>
+    <label>Lieu de livraison <small class="muted">(ville, pays)</small><input name="delivery_place" value="<%= v('delivery_place') %>"></label>
+  </div>
+
+  <fieldset>
+    <legend>Composants et connectique *</legend>
+    <div class="choices">
+      <% Object.entries(COMPONENT_SUPPLY).forEach(([k, l]) => { %>
+      <label class="choice"><input type="radio" name="components_supply" value="<%= k %>" required <%= v('components_supply') === k ? 'checked' : '' %>><span><%= l %></span></label>
+      <% }) %>
+    </div>
+  </fieldset>
+
+  <div class="grid2">
+    <fieldset>
+      <legend>Tests exigés</legend>
+      <div class="checks">
+        <% Object.entries(TESTS).forEach(([k, l]) => { %>
+        <label class="check"><input type="checkbox" name="tests_required" value="<%= k %>" <%= has('tests_required', k) ? 'checked' : '' %>> <%= l %></label>
+        <% }) %>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Certifications exigées du fabricant</legend>
+      <div class="checks">
+        <% Object.entries(CERTIFICATIONS).forEach(([k, l]) => { %>
+        <label class="check"><input type="checkbox" name="certifications_required" value="<%= k %>" <%= has('certifications_required', k) ? 'checked' : '' %>> <%= l %></label>
+        <% }) %>
+      </div>
+    </fieldset>
+  </div>
+
+  <label>Contraintes réglementaires ou d'export <small class="muted">(ITAR/EAR, défense, plans sous NDA…)</small>
+    <textarea name="regulatory_constraints" rows="2"><%= v('regulatory_constraints') %></textarea></label>
+
+  <label>Autres précisions <small class="muted">(conditionnement, marquage, contraintes…)</small>
     <textarea name="notes" rows="4"><%= v('notes') %></textarea></label>
   <label>Autres documents <small class="muted">(cahier des charges, photos, gamme de test…)</small><input type="file" name="other" multiple></label>
 
-  <h2><span class="num">3</span> Vos coordonnées</h2>
+  <h2><span class="num">4</span> Vos coordonnées</h2>
   <div class="grid2">
     <label>Société *<input name="contact_company" required value="<%= v('contact_company') %>"></label>
     <label>Nom et prénom *<input name="contact_name" required value="<%= v('contact_name') %>"></label>
@@ -63,6 +105,9 @@
   </div>
 
   <p class="hint">🔒 Vos coordonnées ne sont jamais communiquées aux sous-traitants : ils ne reçoivent que des documents anonymisés.</p>
+  <label class="check consent"><input type="checkbox" name="confidentiality_consent" value="1" required <%= v('confidentiality_consent') === '1' ? 'checked' : '' %>>
+    J'autorise <%= COMPANY_NAME %> à consulter des partenaires de fabrication, sous accord de confidentialité, sur la base de mes documents anonymisés. *</label>
+  <p class="hint">Si vos plans sont couverts par un accord de confidentialité qui interdit toute diffusion, précisez-le dans les contraintes ci-dessus : nous reviendrons vers vous avant toute consultation.</p>
   <button class="btn btn-primary btn-large">Envoyer ma demande</button>
 </form>
 <%- include('partials/foot') %>

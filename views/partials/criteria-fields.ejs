@@ -1,5 +1,6 @@
 <%# Conditions de sollicitation d'un sous-traitant ; attend `s` (valeurs) %>
-<% const ms = (s.maturities || '').split(','); const v = (x) => x == null ? '' : x; %>
+<% const ms = (s.maturities || '').split(','); const v = (x) => x == null ? '' : x;
+   const sel = (x) => [].concat(x || []).join(',').split(','); const ps = sel(s.processes); const cs = sel(s.certifications); %>
 <div class="grid2">
   <label>Société *<input name="company" required value="<%= v(s.company) %>"></label>
   <label>Contact<input name="contact_name" value="<%= v(s.contact_name) %>"></label>
@@ -11,7 +12,24 @@
     </select>
   </label>
 </div>
-<label>Savoir-faire / équipements<textarea name="capabilities" rows="3" placeholder="Sertissage, surmoulage, test électrique, normes IPC/WHMA-A-620, IRIS…"><%= v(s.capabilities) %></textarea></label>
+<fieldset>
+  <legend>Procédés maîtrisés</legend>
+  <div class="checks">
+    <% Object.entries(PROCESSES).forEach(([k, l]) => { %>
+    <label class="check"><input type="checkbox" name="processes" value="<%= k %>" <%= ps.includes(k) ? 'checked' : '' %>> <%= l %></label>
+    <% }) %>
+  </div>
+</fieldset>
+<fieldset>
+  <legend>Certifications</legend>
+  <div class="checks">
+    <% Object.entries(CERTIFICATIONS).forEach(([k, l]) => { %>
+    <label class="check"><input type="checkbox" name="certifications" value="<%= k %>" <%= cs.includes(k) ? 'checked' : '' %>> <%= l %></label>
+    <% }) %>
+  </div>
+  <label class="check"><input type="checkbox" name="sources_components" value="1" <%= s.sources_components == 1 || s.sources_components === '1' ? 'checked' : '' %>> Nous savons approvisionner les composants et la connectique</label>
+</fieldset>
+<label>Autres savoir-faire / équipements<textarea name="capabilities" rows="3" placeholder="Machines, normes IPC/WHMA-A-620 maîtrisées, capacité…"><%= v(s.capabilities) %></textarea></label>
 <fieldset>
   <legend>Conditions auxquelles vous souhaitez être consulté <small class="muted">(laisser vide = pas de limite)</small></legend>
   <div class="grid3">

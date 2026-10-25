@@ -12,7 +12,7 @@
 <div class="card">
 <% if (!suppliers.length) { %><p class="muted">Aucun sous-traitant. Importez votre base ou ajoutez-en un.</p><% } else { %>
 <table>
-  <thead><tr><th>Société</th><th>Zone</th><th>Heures</th><th>Complexité</th><th>Quantités</th><th>Séries</th><th>Origine</th><th>Consult.</th></tr></thead>
+  <thead><tr><th>Société</th><th>Zone</th><th>Heures</th><th>Complexité</th><th>Quantités</th><th>Séries</th><th>Origine</th><th>Historique</th></tr></thead>
   <tbody>
   <% const r = (a, b) => a == null && b == null ? 'toutes' : `${a ?? '…'} – ${b ?? '…'}`; %>
   <% suppliers.forEach(s => { %>
@@ -23,8 +23,8 @@
       <td><%= r(s.min_complexity, s.max_complexity) %></td>
       <td><%= r(s.min_quantity, s.max_quantity) %></td>
       <td><%= s.maturities.split(',').filter(Boolean).map(m => MATURITIES[m].split(' ')[0]).join(', ') %></td>
-      <td><%= { admin: 'saisi', import: 'importé', self: 'inscrit' }[s.source] %><%= s.user_id ? ' · compte' : '' %></td>
-      <td><%= s.consulted %><%= s.quotes ? ` (${s.quotes} offre${s.quotes > 1 ? 's' : ''})` : '' %></td>
+      <td><%= { admin: 'saisi', import: 'importé', self: 'inscrit' }[s.source] %><%= s.user_id ? ' · compte' : '' %><%= s.nda_accepted_at ? ' · NDA ✓' : '' %></td>
+      <td><small><%= s.statsLabel %></small></td>
     </tr>
   <% }) %>
   </tbody>

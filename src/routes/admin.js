@@ -4,9 +4,10 @@ const express = require('express');
 const { get, all, run, transaction, addEvent, UPLOAD_DIR } = require('../db');
 const { token, requireRole } = require('../auth');
 const { upload, originalName } = require('../files');
-const { evaluate } = require('../matching');
+const { evaluate, preselect, WAVE_SIZE, MAX_PANEL } = require('../matching');
+const { supplierStats, statsLabel } = require('../stats');
 const { parseCsv } = require('../csv');
-const { MATURITIES, SUPPLIER_REGIONS } = require('../labels');
+const { MATURITIES, SUPPLIER_REGIONS, PROCESSES, CERTIFICATIONS, listOf } = require('../labels');
 const { flash, num } = require('../helpers');
 const { notify, defaultBrief } = require('../notify');
 const { criteriaFromBody } = require('./supplier');
@@ -17,7 +18,7 @@ router.use(requireRole('admin'));
 router.get('/', (req, res) => {
   const projects = all(`SELECT p.*,
       (SELECT COUNT(*) FROM consultations c WHERE c.project_id = p.id) AS consulted,
-      (SELECT COUNT(*) FROM consultations c WHERE c.project_id = p.id AND c.status = 'quoted') AS quotes
+      (SELECT COUNT(*) FROM consultations c WHERE c.project_id = p.id AND c.status IN ('quoted', 'won', 'lost')) AS quotes
     FROM projects p ORDER BY p.admin_seen, p.id DESC`);
   res.render('admin/projects', { projects });
 });
@@ -36,11 +37,18 @@ router.get('/projets/:id', loadProject, (req, res) => {
   const consultations = all(`SELECT c.*, s.company, s.email FROM consultations c JOIN suppliers s ON s.id = c.supplier_id
     WHERE c.project_id = ? ORDER BY c.id`, p.id);
   const consulted = new Set(consultations.map((c) => c.supplier_id));
+  const stats = supplierStats();
   const candidates = all('SELECT * FROM suppliers WHERE active = 1 ORDER BY company')
     .filter((s) => !consulted.has(s.id))
-    .map((s) => ({ ...s, ...evaluate(p, s) }))
-    .sort((a, b) => b.match - a.match || a.company.localeCompare(b.company));
+    .map((s) => ({ ...s, ...evaluate(p, s), stats: stats.get(s.id), statsLabel: statsLabel(stats.get(s.id)) }))
+    .sort((a, b) => b.score - a.score || a.company.localeCompare(b.company));
+  const checked = new Set(preselect(candidates, consultations.length));
   res.render('admin/project', {
+    checked,
+    waveSize: WAVE_SIZE,
+    maxPanel: MAX_PANEL,
+    questions: all(`SELECT q.*, s.company FROM questions q LEFT JOIN consultations c ON c.id = q.consultation_id
+      LEFT JOIN suppliers s ON s.id = c.supplier_id WHERE q.project_id = ? ORDER BY q.id`, p.id),
     project: p,
     brief: p.supplier_brief || defaultBrief(p),
     files: all('SELECT * FROM project_files WHERE project_id = ? ORDER BY kind, id', p.id),
@@ -68,15 +76,23 @@ router.post('/projets/:id/consultations', loadProject, async (req, res) => {
   }
   if (!p.supplier_brief) run('UPDATE projects SET supplier_brief = ? WHERE id = ?', defaultBrief(p), p.id);
   const project = get('SELECT * FROM projects WHERE id = ?', p.id);
-  let sent = 0;
-  for (const id of ids) {
-    const supplier = get('SELECT * FROM suppliers WHERE id = ?', id);
-    if (!supplier || get('SELECT id FROM consultations WHERE project_id = ? AND supplier_id = ?', p.id, id)) continue;
-    const t = token();
-    run('INSERT INTO consultations (project_id, supplier_id, token) VALUES (?, ?, ?)', p.id, id, t);
-    if (await notify.consultation(project, supplier, { token: t })) sent++;
+  const already = get('SELECT COUNT(*) AS n FROM consultations WHERE project_id = ?', p.id).n;
+  const fresh = [...new Set(ids)].filter((id) => get('SELECT id FROM suppliers WHERE id = ?', id)
+    && !get('SELECT id FROM consultations WHERE project_id = ? AND supplier_id = ?', p.id, id));
+  // Panel restreint : au-delà de MAX_PANEL fabricants, l'élargissement doit être volontaire (projet atypique).
+  if (already + fresh.length > MAX_PANEL && req.body.widen !== '1') {
+    flash(req, 'error', `Consultation limitée à ${MAX_PANEL} fabricants par projet (${already} déjà consulté(s)). Cochez « élargir volontairement » pour un projet atypique.`);
+    return res.redirect(`/admin/projets/${p.id}#matching`);
   }
-  addEvent(p.id, `Consultation envoyée à ${sent} sous-traitant(s)`, false);
+  const panelSize = already + fresh.length;
+  let sent = 0;
+  for (const id of fresh) {
+    const supplier = get('SELECT * FROM suppliers WHERE id = ?', id);
+    const t = token();
+    run('INSERT INTO consultations (project_id, supplier_id, token, panel_size) VALUES (?, ?, ?, ?)', p.id, id, t, panelSize);
+    if (await notify.consultation(project, supplier, { token: t, panel_size: panelSize })) sent++;
+  }
+  addEvent(p.id, `Consultation envoyée à ${sent} sous-traitant(s) (vague ${already ? 'complémentaire' : 'initiale'})`, false);
   addEvent(p.id, 'Votre demande est à l\'étude auprès de nos partenaires');
   flash(req, 'success', `${sent} consultation(s) envoyée(s).`);
   res.redirect(`/admin/projets/${p.id}#consultations`);
@@ -127,6 +143,53 @@ router.post('/projets/:id/expedition', loadProject, (req, res) => {
   res.redirect(`/admin/projets/${p.id}#etapes`);
 });
 
+// Réponse à une question de sous-traitant : partagée à tous les sous-traitants consultés.
+router.post('/projets/:id/questions/:qid', loadProject, (req, res) => {
+  const p = req.project;
+  const q = get('SELECT * FROM questions WHERE id = ? AND project_id = ?', Number(req.params.qid), p.id);
+  const answer = req.body.answer?.trim();
+  if (!q || !answer) return res.redirect(`/admin/projets/${p.id}#questions`);
+  run("UPDATE questions SET answer = ?, answered_at = datetime('now') WHERE id = ?", answer, q.id);
+  const recipients = all(`SELECT s.*, c.token FROM consultations c JOIN suppliers s ON s.id = c.supplier_id
+    WHERE c.project_id = ? AND c.status IN ('sent', 'viewed', 'quoted')`, p.id);
+  for (const s of recipients) notify.questionAnswered(p, s, { token: s.token }, { ...q, answer });
+  addEvent(p.id, `Réponse à une question partagée à ${recipients.length} sous-traitant(s)`, false);
+  flash(req, 'success', `Réponse partagée à ${recipients.length} sous-traitant(s).`);
+  res.redirect(`/admin/projets/${p.id}#questions`);
+});
+
+// Question posée directement par l'admin (ex. précision du client à diffuser à tous).
+router.post('/projets/:id/questions', loadProject, (req, res) => {
+  const p = req.project;
+  const question = req.body.question?.trim();
+  if (question) run('INSERT INTO questions (project_id, question) VALUES (?, ?)', p.id, question);
+  res.redirect(`/admin/projets/${p.id}#questions`);
+});
+
+// Issue de la consultation : sous-traitant retenu et retour personnalisé aux autres.
+router.post('/projets/:id/issue', loadProject, (req, res) => {
+  const p = req.project;
+  const winner = num(req.body.winner);
+  const consultations = all(`SELECT c.*, s.company, s.email, s.contact_name FROM consultations c
+    JOIN suppliers s ON s.id = c.supplier_id WHERE c.project_id = ? AND c.status IN ('quoted', 'won', 'lost')`, p.id);
+  let sent = 0;
+  for (const c of consultations) {
+    const status = c.id === winner ? 'won' : 'lost';
+    const feedback = req.body[`feedback_${c.id}`]?.trim() || null;
+    const changed = status !== c.status || (feedback && feedback !== c.feedback);
+    if (!changed) continue;
+    run(`UPDATE consultations SET status = ?, feedback = COALESCE(?, feedback),
+      feedback_at = CASE WHEN ? IS NOT NULL THEN datetime('now') ELSE feedback_at END WHERE id = ?`, status, feedback, feedback, c.id);
+    if (req.body.notify === '1') {
+      notify.consultationOutcome(p, c, status, feedback);
+      sent++;
+    }
+  }
+  addEvent(p.id, winner ? `Sous-traitant retenu : ${consultations.find((c) => c.id === winner)?.company}` : 'Consultation close sans suite', false);
+  flash(req, 'success', `Issue enregistrée${sent ? `, ${sent} retour(s) envoyé(s)` : ''}.`);
+  res.redirect(`/admin/projets/${p.id}#consultations`);
+});
+
 router.post('/projets/:id/note', loadProject, (req, res) => {
   if (req.body.message?.trim()) addEvent(req.project.id, req.body.message.trim(), req.body.visible === '1');
   res.redirect(`/admin/projets/${req.project.id}#historique`);
@@ -175,9 +238,10 @@ router.post('/fichiers/:fileId/anonyme', loadFile, upload.single('file'), (req, 
 
 router.get('/sous-traitants', (req, res) => {
   const suppliers = all(`SELECT s.*, (SELECT COUNT(*) FROM consultations c WHERE c.supplier_id = s.id) AS consulted,
-    (SELECT COUNT(*) FROM consultations c WHERE c.supplier_id = s.id AND c.status = 'quoted') AS quotes
+    (SELECT COUNT(*) FROM consultations c WHERE c.supplier_id = s.id AND c.status IN ('quoted', 'won', 'lost')) AS quotes
     FROM suppliers s ORDER BY s.active DESC, s.company`);
-  res.render('admin/suppliers', { suppliers });
+  const stats = supplierStats();
+  res.render('admin/suppliers', { suppliers: suppliers.map((s) => ({ ...s, statsLabel: statsLabel(stats.get(s.id)) })) });
 });
 
 router.get('/sous-traitants/nouveau', (req, res) => {
@@ -224,12 +288,14 @@ router.post('/sous-traitants-import', upload.single('csv'), (req, res) => {
       if (!r.company || !r.email || get('SELECT id FROM suppliers WHERE email = ?', r.email)) { skipped++; continue; }
       const region = REGION_ALIASES[(r.region || '').toLowerCase()] || (SUPPLIER_REGIONS[r.region] ? r.region : 'other');
       const maturities = (r.maturities || 'proto,first_series,mature').split(/[,|]/).map((m) => m.trim()).filter((m) => MATURITIES[m]);
+      const keys = (value, dict) => listOf(String(value || '').replace(/\|/g, ','), dict).join(',') || null;
       run(`INSERT INTO suppliers (company, contact_name, email, phone, country, region, capabilities, min_hours, max_hours,
-           min_complexity, max_complexity, min_quantity, max_quantity, maturities, source)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'import')`,
+           min_complexity, max_complexity, min_quantity, max_quantity, maturities, processes, certifications, sources_components, source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'import')`,
         r.company, r.contact_name || null, r.email, r.phone || null, r.country || null, region, r.capabilities || null,
         num(r.min_hours), num(r.max_hours), num(r.min_complexity), num(r.max_complexity), num(r.min_quantity), num(r.max_quantity),
-        maturities.join(','));
+        maturities.join(','), keys(r.processes, PROCESSES), keys(r.certifications, CERTIFICATIONS),
+        /^(1|oui|yes|true|x)$/i.test(String(r.sources_components || '').trim()) ? 1 : 0);
       created++;
     }
   });
