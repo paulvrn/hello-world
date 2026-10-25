@@ -1,0 +1,1281 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Frises mémoire</title>
+<meta name="description" content="Frises chronologiques personnelles pour retenir l'histoire des arts et l'histoire politique, avec export Excel / Anki.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #faf8f4;
+  --surface: #ffffff;
+  --surface-2: #f2efe8;
+  --text: #1f1d1a;
+  --muted: #6b665d;
+  --border: #e3ded3;
+  --accent: #9a3412;
+  --accent-text: #ffffff;
+  --danger: #b91c1c;
+  --shadow: 0 10px 30px rgba(40, 30, 10, .12);
+  --axis: #b9b2a4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171614;
+    --surface: #211f1c;
+    --surface-2: #2a2824;
+    --text: #efebe3;
+    --muted: #a39d92;
+    --border: #3a3732;
+    --accent: #f97316;
+    --accent-text: #1a0d03;
+    --danger: #f87171;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    --axis: #5b564d;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171614; --surface: #211f1c; --surface-2: #2a2824; --text: #efebe3; --muted: #a39d92;
+  --border: #3a3732; --accent: #f97316; --accent-text: #1a0d03; --danger: #f87171;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .5); --axis: #5b564d;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+header.top {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--surface);
+  position: sticky; top: 0; z-index: 20;
+}
+header.top h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.01em; margin-right: auto; }
+header.top h1 span { color: var(--accent); }
+
+.btn {
+  border: 1px solid var(--border); background: var(--surface); padding: 7px 12px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--danger); }
+.btn.icon { padding: 7px 10px; }
+
+.tabs {
+  display: flex; gap: 6px; padding: 10px 16px; overflow-x: auto; scrollbar-width: thin;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.tab {
+  border: 1px solid var(--border); background: transparent; padding: 5px 12px; border-radius: 999px;
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; color: var(--muted);
+}
+.tab .dot { width: 9px; height: 9px; border-radius: 50%; }
+.tab .count { font-size: 12px; opacity: .75; }
+.tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.toolbar .span { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+.timeline-wrap {
+  position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab;
+}
+.timeline-wrap.dragging { cursor: grabbing; }
+.axis { position: relative; height: 34px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--axis); }
+.tick span { position: absolute; left: 4px; top: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.lanes { position: relative; min-height: 120px; }
+.gridline { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--border); pointer-events: none; }
+.group-head {
+  position: absolute; left: 0; right: 0; height: 26px; padding: 4px 10px; font-size: 12px; font-weight: 650;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-top: 1px solid var(--border);
+}
+.group-head:first-child { border-top: 0; }
+.ev {
+  position: absolute; height: 24px; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  font-size: 13px; cursor: pointer;
+}
+.ev .bar { height: 14px; border-radius: 4px; flex: none; opacity: .9; }
+.ev .pin { width: 12px; height: 12px; border-radius: 50%; flex: none; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--axis); margin-left: -6px; }
+.ev .lbl { padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--surface) 85%, transparent); }
+.ev:hover .lbl, .ev:focus-visible .lbl { background: var(--surface-2); outline: 1px solid var(--border); }
+.ev:focus-visible { outline: none; }
+.empty-lane { position: absolute; left: 10px; font-size: 13px; color: var(--muted); font-style: italic; }
+
+.blank {
+  text-align: center; padding: 70px 20px; border: 2px dashed var(--border); border-radius: 16px; color: var(--muted);
+}
+.blank h2 { color: var(--text); margin: 0 0 8px; font-size: 22px; font-weight: 600; }
+.blank p { margin: 0 auto 20px; max-width: 460px; }
+
+.list-head { display: flex; align-items: center; gap: 10px; margin: 24px 0 10px; flex-wrap: wrap; }
+.list-head h2 { font-size: 16px; margin: 0; margin-right: auto; }
+.search { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); min-width: 0; width: 240px; max-width: 100%; }
+.cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--c, var(--accent));
+  border-radius: 10px; padding: 12px 14px; cursor: pointer; text-align: left; width: 100%;
+}
+.card:hover { box-shadow: var(--shadow); }
+.card .date { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card h3 { margin: 2px 0 6px; font-size: 15px; }
+.card p { margin: 0; font-size: 13.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card .how { margin-top: 8px; font-size: 12.5px; font-style: italic; color: var(--muted); }
+.card .how::before { content: "💡 "; font-style: normal; }
+
+dialog {
+  border: 1px solid var(--border); border-radius: 14px; padding: 0; background: var(--surface); color: var(--text);
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(20, 15, 5, .45); }
+.dlg-head { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); gap: 10px; }
+.dlg-head h2 { margin: 0; font-size: 17px; margin-right: auto; }
+.dlg-body { padding: 16px 18px; display: grid; gap: 14px; }
+.dlg-foot { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.dlg-foot .grow { flex: 1; }
+label.f { display: grid; gap: 5px; font-size: 13px; font-weight: 600; }
+label.f .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
+label.f input, label.f select, label.f textarea {
+  border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 8px 10px; font-weight: 400; font-size: 15px; width: 100%;
+}
+label.f textarea { resize: vertical; min-height: 70px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .row2 { grid-template-columns: 1fr; } }
+.parsed { font-weight: 400; font-size: 12px; color: var(--muted); min-height: 16px; }
+.parsed.err { color: var(--danger); }
+.howbox { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+
+.detail .period { color: var(--muted); font-variant-numeric: tabular-nums; }
+.detail .desc { white-space: pre-wrap; margin: 0; }
+.detail .howbox { white-space: pre-wrap; font-style: italic; }
+.detail .howbox b { font-style: normal; display: block; margin-bottom: 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.menu { position: relative; }
+.menu-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: var(--shadow); padding: 6px; min-width: 260px; display: none; z-index: 30;
+}
+.menu-pop.open { display: block; }
+.menu-pop button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 7px; }
+.menu-pop button:hover { background: var(--surface-2); }
+.menu-pop button small { display: block; color: var(--muted); font-size: 12px; }
+.menu-pop hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
+
+.frise-row { display: flex; gap: 8px; align-items: center; }
+.frise-row input[type=text] { flex: 1; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.frise-row input[type=color] { width: 38px; height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--bg); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+  padding: 9px 16px; border-radius: 999px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100;
+}
+.toast.show { opacity: 1; }
+.help { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+
+/* ---------- Modes ---------- */
+.modes { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+.mode { border: 0; background: transparent; padding: 6px 14px; border-radius: 8px; color: var(--muted); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.mode.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.badge { background: var(--accent); color: var(--accent-text); border-radius: 999px; font-size: 11px; padding: 1px 7px; min-width: 20px; text-align: center; }
+.badge:empty { display: none; }
+
+/* ---------- Révision ---------- */
+.rv { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.rv-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.rv-top .counts { margin-right: auto; display: flex; gap: 12px; }
+.rv-top .counts b { font-variant-numeric: tabular-nums; }
+.c-new b { color: #2563eb; } .c-learn b { color: #c2410c; } .c-rev b { color: #15803d; }
+.progress { height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.progress div { height: 100%; background: var(--accent); transition: width .3s; }
+.rv-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow);
+  padding: 28px 24px; min-height: 300px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px;
+}
+.rv-card .q { font-size: 24px; font-weight: 650; line-height: 1.25; letter-spacing: -.01em; }
+.rv-card .qsub { color: var(--muted); font-size: 14px; margin-top: -6px; }
+.rv-card hr { width: 100%; border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.rv-card .a { font-size: 22px; font-weight: 650; color: var(--accent); font-variant-numeric: tabular-nums; }
+.rv-card .desc { white-space: pre-wrap; margin: 0; color: var(--text); max-width: 52ch; }
+.rv-card .howbox { white-space: pre-wrap; font-style: italic; text-align: left; width: 100%; }
+.rv-card .howbox b { font-style: normal; display: block; margin-bottom: 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.hint-btn { border: 1px dashed var(--border); background: transparent; border-radius: 999px; padding: 6px 14px; color: var(--muted); font-size: 13px; }
+.hint-btn:hover { background: var(--surface-2); }
+.rv-actions { position: sticky; bottom: 0; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--bg) 30%); }
+.reveal { width: 100%; justify-content: center; padding: 16px; font-size: 16px; border-radius: 12px; }
+.grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.grade { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 650; }
+.grade small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.grade:hover { background: var(--surface-2); }
+.g1 { color: #dc2626; } .g2 { color: #d97706; } .g3 { color: #16a34a; } .g4 { color: #2563eb; }
+.kbd { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; }
+@media (hover: none) { .kbd { display: none; } }
+.rv-done { text-align: center; padding: 50px 20px; }
+.rv-done h2 { margin: 0 0 6px; font-size: 22px; }
+.rv-done p { color: var(--muted); margin: 0 0 16px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px auto 0; max-width: 460px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; color: var(--muted); }
+label.chk { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+label.chk input { margin-top: 3px; }
+label.chk small { display: block; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Frises <span>mémoire</span></h1>
+  <div class="modes">
+    <button class="mode active" data-mode="frises">Frises</button>
+    <button class="mode" data-mode="review">Réviser <span class="badge" id="dueBadge"></span></button>
+  </div>
+  <button class="btn primary" id="addBtn">＋ Nouvelle entrée</button>
+  <div class="menu">
+    <button class="btn" id="menuBtn" aria-haspopup="true">Exporter / Importer ▾</button>
+    <div class="menu-pop" id="menuPop">
+      <button data-act="xlsx">📊 Exporter en Excel (.xlsx)<small>Une feuille par frise + une feuille « Anki »</small></button>
+      <button data-act="anki">🃏 Exporter pour Anki (.csv)<small>Directement importable dans Anki</small></button>
+      <hr>
+      <button data-act="json">💾 Sauvegarde complète (.json)</button>
+      <button data-act="import">📥 Importer (.json ou .xlsx)<small>Fusionne avec les entrées existantes</small></button>
+      <hr>
+      <button data-act="frises">🎨 Gérer les frises</button>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main>
+  <div id="blank" class="blank" hidden>
+    <h2>Page blanche</h2>
+    <p>Vos frises se construiront au fil de vos découvertes. Ajoutez une première entrée : une date, ce qu'il s'est passé, et surtout comment vous l'avez appris.</p>
+    <button class="btn primary" id="blankAdd">＋ Ajouter ma première entrée</button>
+  </div>
+
+  <section id="tlSection" hidden>
+    <div class="toolbar">
+      <button class="btn icon" id="zoomOut" title="Dézoomer">−</button>
+      <button class="btn icon" id="zoomIn" title="Zoomer">＋</button>
+      <button class="btn" id="fitBtn">Tout voir</button>
+      <span class="span" id="spanLbl"></span>
+    </div>
+    <div class="timeline-wrap" id="tl">
+      <div class="axis" id="axis"></div>
+      <div class="lanes" id="lanes"></div>
+    </div>
+    <div class="help">Glissez pour vous déplacer · molette, pincement ou boutons pour zoomer · touchez une entrée pour la voir.</div>
+
+    <div class="list-head">
+      <h2 id="listTitle">Entrées</h2>
+      <input class="search" id="search" type="search" placeholder="Rechercher…">
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section id="reviewSection" class="rv" hidden></section>
+</main>
+
+<!-- Réglages de révision -->
+<dialog id="srsDlg">
+  <div class="dlg-head"><h2>Réglages de révision</h2><button class="btn icon" id="srsClose">✕</button></div>
+  <div class="dlg-body">
+    <label class="f">Nouvelles cartes par jour
+      <input type="number" id="sNew" min="0" max="500" step="1">
+    </label>
+    <label class="chk"><input type="checkbox" id="sReverse">
+      <span>Cartes inversées « Date → Quoi ? »<small>En plus de « Titre → Quand ? », une seconde carte par entrée demande de retrouver l'événement à partir de la date.</small></span>
+    </label>
+  </div>
+  <div class="dlg-foot"><span class="grow"></span><button class="btn primary" id="srsDone">Terminé</button></div>
+</dialog>
+
+<!-- Formulaire d'entrée -->
+<dialog id="entryDlg">
+  <form method="dialog" id="entryForm">
+    <div class="dlg-head"><h2 id="entryDlgTitle">Nouvelle entrée</h2><button class="btn icon" value="cancel" formnovalidate>✕</button></div>
+    <div class="dlg-body">
+      <label class="f">Frise
+        <select id="fFrise"></select>
+      </label>
+      <label class="f">Titre
+        <input id="fTitle" required maxlength="200" placeholder="ex. Le Radeau de la Méduse (Géricault)">
+      </label>
+      <div class="row2">
+        <label class="f">Date de début
+          <input id="fStart" required placeholder="1819, 03/1819, 14/07/1789, 44 av. J.-C.">
+          <span class="parsed" id="pStart"></span>
+        </label>
+        <label class="f">Date de fin <span class="hint">(facultatif)</span>
+          <input id="fEnd" placeholder="ex. 1821">
+          <span class="parsed" id="pEnd"></span>
+        </label>
+      </div>
+      <label class="f">Descriptif
+        <textarea id="fDesc" rows="4" placeholder="Ce qu'il faut retenir…"></textarea>
+      </label>
+      <label class="f">Comment je l'ai appris
+        <span class="hint">Où, quand, avec qui, dans quel contexte ? Se souvenir du moment aide à retenir.</span>
+        <textarea id="fHow" rows="3" placeholder="ex. Au Louvre avec Marie, un dimanche pluvieux de novembre ; le guide racontait le naufrage…"></textarea>
+      </label>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn danger" id="fDelete" type="button" hidden>Supprimer</button>
+      <span class="grow"></span>
+      <button class="btn" value="cancel" formnovalidate>Annuler</button>
+      <button class="btn primary" id="fSave" value="save">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Détail d'une entrée -->
+<dialog id="detailDlg">
+  <div class="dlg-head"><h2 id="dTitle"></h2><button class="btn icon" id="dClose">✕</button></div>
+  <div class="dlg-body detail" id="dBody"></div>
+  <div class="dlg-foot">
+    <span class="grow"></span>
+    <button class="btn" id="dEdit">Modifier</button>
+  </div>
+</dialog>
+
+<!-- Gestion des frises -->
+<dialog id="friseDlg">
+  <div class="dlg-head"><h2>Frises</h2><button class="btn icon" id="frClose">✕</button></div>
+  <div class="dlg-body" id="frBody"></div>
+  <div class="dlg-foot">
+    <button class="btn" id="frAdd">＋ Ajouter une frise</button>
+    <span class="grow"></span>
+    <button class="btn primary" id="frDone">Terminé</button>
+  </div>
+</dialog>
+
+<input type="file" id="importFile" accept=".json,.xlsx,.xls" hidden>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ---------- Données ---------- */
+const STORE_KEY = 'frises-memoire-v1';
+const PALETTE = ['#c2410c', '#a16207', '#4d7c0f', '#0f766e', '#0369a1', '#4338ca', '#7e22ce', '#be185d', '#475569'];
+const DEFAULT_FRISES = ['Peinture', 'Sculpture', 'Architecture', 'Musique', 'Danse', 'Cinéma', 'Histoire politique'];
+const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+function defaultState() {
+  return {
+    version: 1,
+    frises: DEFAULT_FRISES.map((name, i) => ({ id: uid(), name, color: PALETTE[i % PALETTE.length] })),
+    entries: []
+  };
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && Array.isArray(s.frises) && Array.isArray(s.entries)) return withSrs(s);
+    }
+  } catch (e) { /* stockage indisponible */ }
+  return withSrs(defaultState());
+}
+
+// État de répétition espacée, indexé par identifiant de carte (`<entrée>:when` ou `<entrée>:what`).
+function withSrs(s) {
+  s.srs = s.srs || {};
+  s.srs.cards = s.srs.cards || {};
+  s.srs.daily = s.srs.daily || { date: '', newCount: 0, extra: 0 };
+  s.srs.settings = { newPerDay: 15, reverse: false, ...s.srs.settings };
+  return s;
+}
+
+let state = load();
+let current = 'all'; // id de frise ou 'all'
+
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch (e) { toast("⚠️ Impossible d'enregistrer localement — pensez à exporter une sauvegarde"); }
+}
+
+const friseById = id => state.frises.find(f => f.id === id);
+
+/* ---------- Dates ---------- */
+const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\./g, '');
+const MONTHS_NORM = MONTHS.map(norm);
+
+function monthIndex(word) {
+  const w = norm(word);
+  if (w.length < 3) return -1;
+  return MONTHS_NORM.findIndex(m => m.startsWith(w));
+}
+
+// Accepte : 1789 · -44 · 44 av. J.-C. · 07/1789 · 14/07/1789 · 1789-07-14 · 14 juillet 1789 · juillet 1789
+function parseDate(raw) {
+  let s = (raw || '').trim().toLowerCase();
+  if (!s) return null;
+  let bc = false;
+  const bcRe = /\s*(av(\.|ant)?\s*j[\s.-]*c\.?|av\.?\s*n\.?\s*e\.?|bce?)\s*$/;
+  if (bcRe.test(s)) { bc = true; s = s.replace(bcRe, '').trim(); }
+  s = s.replace(/\s*(ap(\.|r[eè]s)?\s*j[\s.-]*c\.?|ad)\s*$/, '').trim();
+  let y, m = null, d = null, mm;
+  if ((mm = s.match(/^(-?\d{1,6})$/))) { y = +mm[1]; }
+  else if ((mm = s.match(/^(-?\d{1,6})-(\d{1,2})(?:-(\d{1,2}))?$/))) { y = +mm[1]; m = +mm[2]; d = mm[3] ? +mm[3] : null; }
+  else if ((mm = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](-?\d{1,6})$/))) { d = +mm[1]; m = +mm[2]; y = +mm[3]; }
+  else if ((mm = s.match(/^(\d{1,2})[\/.](-?\d{1,6})$/))) { m = +mm[1]; y = +mm[2]; }
+  else if ((mm = s.match(/^(?:(\d{1,2})(?:er)?\s+)?([a-zà-ÿ.]+)\s+(-?\d{1,6})$/))) {
+    const mi = monthIndex(mm[2]);
+    if (mi < 0) return null;
+    m = mi + 1; d = mm[1] ? +mm[1] : null; y = +mm[3];
+  }
+  else return null;
+  if (bc) y = -Math.abs(y);
+  if (m !== null && (m < 1 || m > 12)) return null;
+  if (d !== null && (d < 1 || d > 31)) return null;
+  return { y, m, d };
+}
+
+function formatDate(o) {
+  if (!o) return '';
+  const year = o.y < 0 ? `${-o.y} av. J.-C.` : String(o.y);
+  const parts = [];
+  if (o.d) parts.push(o.d === 1 ? '1er' : String(o.d));
+  if (o.m) parts.push(MONTHS[o.m - 1]);
+  parts.push(year);
+  return parts.join(' ');
+}
+
+const formatRange = e => e.end ? `${formatDate(e.start)} – ${formatDate(e.end)}` : formatDate(e.start);
+
+// Position en années décimales ; une date de fin couvre toute son unité (année, mois ou jour).
+function startNum(o) { return o.y + ((o.m || 1) - 1) / 12 + ((o.d || 1) - 1) / 365.25; }
+function endNum(o) { return startNum(o) + (o.d ? 1 / 365.25 : o.m ? 1 / 12 : 1); }
+
+const sortEntries = list => list.slice().sort((a, b) => startNum(a.start) - startNum(b.start) || a.title.localeCompare(b.title));
+
+/* ---------- Utilitaires ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function visibleFrises() { return current === 'all' ? state.frises : state.frises.filter(f => f.id === current); }
+function visibleEntries() {
+  const ids = new Set(visibleFrises().map(f => f.id));
+  return state.entries.filter(e => ids.has(e.friseId));
+}
+
+/* ---------- Onglets ---------- */
+function renderTabs() {
+  const counts = {};
+  state.entries.forEach(e => { counts[e.friseId] = (counts[e.friseId] || 0) + 1; });
+  const tabs = [`<button class="tab ${current === 'all' ? 'active' : ''}" data-id="all">Toutes <span class="count">${state.entries.length}</span></button>`];
+  state.frises.forEach(f => {
+    tabs.push(`<button class="tab ${current === f.id ? 'active' : ''}" data-id="${f.id}"><span class="dot" style="background:${f.color}"></span>${esc(f.name)} <span class="count">${counts[f.id] || 0}</span></button>`);
+  });
+  tabs.push(`<button class="tab" data-id="__new" title="Nouvelle frise">＋ Frise</button>`);
+  $('tabs').innerHTML = tabs.join('');
+}
+
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab');
+  if (!b) return;
+  if (b.dataset.id === '__new') { const f = promptNewFrise(); if (f) { current = f.id; renderAll(true); } return; }
+  current = b.dataset.id;
+  renderAll(true);
+});
+
+function promptNewFrise() {
+  const name = (prompt('Nom de la nouvelle frise (ex. Littérature, Photographie…)') || '').trim();
+  if (!name) return null;
+  const f = { id: uid(), name, color: PALETTE[state.frises.length % PALETTE.length] };
+  state.frises.push(f); save();
+  return f;
+}
+
+/* ---------- Frise chronologique ---------- */
+const view = { start: 1400, end: 2030 };
+const ROW_H = 30, HEAD_H = 28, PAD_TOP = 8;
+const measureCtx = document.createElement('canvas').getContext('2d');
+
+function fitView() {
+  const list = visibleEntries();
+  if (!list.length) { view.start = 1400; view.end = 2030; return; }
+  let lo = Infinity, hi = -Infinity;
+  list.forEach(e => {
+    lo = Math.min(lo, startNum(e.start));
+    hi = Math.max(hi, e.end ? endNum(e.end) : startNum(e.start));
+  });
+  let span = hi - lo;
+  if (span < 20) { const mid = (lo + hi) / 2; lo = mid - 10; hi = mid + 10; span = 20; }
+  // marge à droite pour les libellés
+  view.start = lo - span * 0.05;
+  view.end = hi + span * 0.25;
+}
+
+function tickStep(span, width) {
+  const target = span / Math.max(2, width / 110);
+  const steps = [1 / 12, 3 / 12, 6 / 12, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 50000, 100000];
+  return steps.find(s => s >= target) || steps[steps.length - 1];
+}
+
+function tickLabel(t, step) {
+  const y = Math.floor(t + 1e-9);
+  const yl = y < 0 ? `${-y} av. J.-C.` : String(y);
+  if (step < 1) {
+    const mi = Math.round((t - y) * 12) % 12;
+    return mi === 0 ? yl : `${MONTHS_SHORT[mi]} ${yl}`;
+  }
+  return yl;
+}
+
+function renderTimeline() {
+  const wrap = $('tl');
+  const W = wrap.clientWidth;
+  const span = view.end - view.start;
+  const px = t => (t - view.start) / span * W;
+
+  // Axe
+  const step = tickStep(span, W);
+  const first = Math.ceil(view.start / step) * step;
+  let axis = '', grid = '';
+  for (let t = first; t <= view.end; t += step) {
+    const x = px(t).toFixed(1);
+    axis += `<div class="tick" style="left:${x}px"><span>${tickLabel(t, step)}</span></div>`;
+    grid += `<div class="gridline" style="left:${x}px"></div>`;
+  }
+  $('axis').innerHTML = axis;
+  $('spanLbl').textContent = `${tickLabel(view.start, 1)} → ${tickLabel(view.end, 1)}`;
+
+  // Couloirs
+  measureCtx.font = getComputedStyle(document.body).font.replace(/\d+(\.\d+)?px/, '13px');
+  let y = 0, html = '';
+  const groups = visibleFrises();
+  groups.forEach(f => {
+    const list = sortEntries(state.entries.filter(e => e.friseId === f.id));
+    if (current === 'all' && !list.length) return;
+    html += `<div class="group-head" style="top:${y}px"><span style="color:${f.color}">●</span> ${esc(f.name)}</div>`;
+    y += HEAD_H;
+    if (!list.length) {
+      html += `<div class="empty-lane" style="top:${y + 4}px">Aucune entrée pour l'instant.</div>`;
+      y += ROW_H + PAD_TOP;
+      return;
+    }
+    const rowsEnd = []; // dernière position x occupée par rangée
+    list.forEach(e => {
+      const x1 = px(startNum(e.start));
+      const x2 = e.end ? px(endNum(e.end)) : x1;
+      const barW = e.end ? Math.max(6, x2 - x1) : 0;
+      const labelW = measureCtx.measureText(e.title).width + 18;
+      const right = x1 + barW + labelW + 10;
+      let row = rowsEnd.findIndex(r => r < x1 - 4);
+      if (row < 0) { row = rowsEnd.length; rowsEnd.push(right); } else rowsEnd[row] = right;
+      if (right < -50 || x1 > W + 50) return; // hors écran
+      const top = y + PAD_TOP / 2 + row * ROW_H;
+      const mark = e.end
+        ? `<span class="bar" style="width:${barW.toFixed(1)}px;background:${f.color}"></span>`
+        : `<span class="pin" style="background:${f.color}"></span>`;
+      html += `<div class="ev" tabindex="0" data-id="${e.id}" style="left:${x1.toFixed(1)}px;top:${top}px" title="${esc(formatRange(e))}">${mark}<span class="lbl">${esc(e.title)}</span></div>`;
+    });
+    y += Math.max(1, rowsEnd.length) * ROW_H + PAD_TOP;
+  });
+  const lanes = $('lanes');
+  lanes.style.height = Math.max(120, y + 6) + 'px';
+  lanes.innerHTML = grid + html;
+}
+
+function zoom(factor, anchorX) {
+  const W = $('tl').clientWidth;
+  const ax = anchorX ?? W / 2;
+  const span = view.end - view.start;
+  const t = view.start + ax / W * span;
+  const ns = Math.min(200000, Math.max(0.25, span * factor));
+  view.start = t - ax / W * ns;
+  view.end = view.start + ns;
+  renderTimeline();
+}
+
+function pan(dx) {
+  const W = $('tl').clientWidth;
+  const d = dx / W * (view.end - view.start);
+  view.start -= d; view.end -= d;
+  renderTimeline();
+}
+
+// Glisser / pincer / molette
+(() => {
+  const tl = $('tl');
+  const pts = new Map();
+  let lastX = 0, moved = 0, pinchDist = 0;
+  tl.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) { lastX = e.clientX; moved = 0; }
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinchDist = Math.abs(a.x - b.x); }
+  });
+  tl.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) {
+      const dx = e.clientX - lastX;
+      moved += Math.abs(dx);
+      if (moved > 4) { tl.classList.add('dragging'); if (!tl.hasPointerCapture(e.pointerId)) tl.setPointerCapture(e.pointerId); }
+      lastX = e.clientX;
+      if (moved > 4) pan(dx);
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      const dist = Math.abs(a.x - b.x);
+      if (pinchDist > 10 && dist > 10) {
+        const rect = tl.getBoundingClientRect();
+        zoom(pinchDist / dist, (a.x + b.x) / 2 - rect.left);
+      }
+      pinchDist = dist; moved = 99;
+    }
+  });
+  const up = e => {
+    pts.delete(e.pointerId);
+    if (pts.size === 1) lastX = [...pts.values()][0].x;
+    if (!pts.size) tl.classList.remove('dragging');
+  };
+  tl.addEventListener('pointerup', up);
+  tl.addEventListener('pointercancel', up);
+  tl.addEventListener('click', e => {
+    if (moved > 4) return;
+    const ev = e.target.closest('.ev');
+    if (ev) openDetail(ev.dataset.id);
+  });
+  tl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.classList.contains('ev')) openDetail(e.target.dataset.id);
+  });
+  tl.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = tl.getBoundingClientRect();
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) pan(-e.deltaX);
+    else if (e.shiftKey) pan(-e.deltaY);
+    else zoom(Math.exp(e.deltaY * 0.0015), e.clientX - rect.left);
+  }, { passive: false });
+})();
+
+$('zoomIn').onclick = () => zoom(0.6);
+$('zoomOut').onclick = () => zoom(1 / 0.6);
+$('fitBtn').onclick = () => { fitView(); renderTimeline(); };
+window.addEventListener('resize', () => renderTimeline());
+
+/* ---------- Liste ---------- */
+function renderCards() {
+  const q = norm($('search').value.trim().toLowerCase());
+  let list = sortEntries(visibleEntries());
+  if (q) list = list.filter(e => norm(`${e.title} ${e.description} ${e.howLearned} ${formatRange(e)}`.toLowerCase()).includes(q));
+  const f = current === 'all' ? null : friseById(current);
+  $('listTitle').textContent = `${f ? f.name : 'Toutes les entrées'} · ${list.length}`;
+  $('cards').innerHTML = list.map(e => {
+    const fr = friseById(e.friseId);
+    return `<button class="card" data-id="${e.id}" style="--c:${fr ? fr.color : ''}">
+      <div class="date">${esc(formatRange(e))}${current === 'all' && fr ? ' · ' + esc(fr.name) : ''}</div>
+      <h3>${esc(e.title)}</h3>
+      ${e.description ? `<p>${esc(e.description)}</p>` : ''}
+      ${e.howLearned ? `<div class="how">${esc(e.howLearned)}</div>` : ''}
+    </button>`;
+  }).join('') || `<p style="color:var(--muted)">${q ? 'Aucun résultat.' : 'Aucune entrée dans cette frise pour l’instant.'}</p>`;
+}
+$('cards').addEventListener('click', e => { const c = e.target.closest('.card'); if (c) openDetail(c.dataset.id); });
+$('search').addEventListener('input', renderCards);
+
+/* ---------- Rendu global ---------- */
+function renderAll(refit) {
+  renderTabs();
+  renderBadge();
+  document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  $('reviewSection').hidden = mode !== 'review';
+  if (mode === 'review') { $('blank').hidden = $('tlSection').hidden = true; renderReview(); return; }
+  const empty = state.entries.length === 0 && current === 'all';
+  $('blank').hidden = !empty;
+  $('tlSection').hidden = empty;
+  if (empty) return;
+  if (refit) fitView();
+  renderTimeline();
+  renderCards();
+}
+
+/* ---------- Formulaire ---------- */
+let editingId = null;
+
+function fillFriseSelect(selected) {
+  $('fFrise').innerHTML = state.frises.map(f => `<option value="${f.id}" ${f.id === selected ? 'selected' : ''}>${esc(f.name)}</option>`).join('')
+    + `<option value="__new">＋ Nouvelle frise…</option>`;
+}
+
+function showParsed(inputId, outId) {
+  const v = $(inputId).value.trim();
+  const out = $(outId);
+  if (!v) { out.textContent = ''; out.classList.remove('err'); return; }
+  const p = parseDate(v);
+  out.textContent = p ? '→ ' + formatDate(p) : 'Format non reconnu';
+  out.classList.toggle('err', !p);
+}
+$('fStart').addEventListener('input', () => showParsed('fStart', 'pStart'));
+$('fEnd').addEventListener('input', () => showParsed('fEnd', 'pEnd'));
+$('fFrise').addEventListener('change', () => {
+  if ($('fFrise').value !== '__new') return;
+  const f = promptNewFrise();
+  fillFriseSelect(f ? f.id : state.frises[0]?.id);
+  renderTabs();
+});
+
+function openForm(id) {
+  editingId = id || null;
+  const e = id ? state.entries.find(x => x.id === id) : null;
+  $('entryDlgTitle').textContent = e ? "Modifier l'entrée" : 'Nouvelle entrée';
+  fillFriseSelect(e ? e.friseId : (current !== 'all' ? current : state.frises[0]?.id));
+  $('fTitle').value = e ? e.title : '';
+  $('fStart').value = e ? formatDate(e.start) : '';
+  $('fEnd').value = e && e.end ? formatDate(e.end) : '';
+  $('fDesc').value = e ? e.description : '';
+  $('fHow').value = e ? e.howLearned : '';
+  $('fDelete').hidden = !e;
+  showParsed('fStart', 'pStart'); showParsed('fEnd', 'pEnd');
+  $('entryDlg').showModal();
+  $('fTitle').focus();
+}
+
+$('fSave').addEventListener('click', ev => {
+  const start = parseDate($('fStart').value);
+  const endRaw = $('fEnd').value.trim();
+  const end = endRaw ? parseDate(endRaw) : null;
+  const err = !$('fTitle').value.trim() ? 'Indiquez un titre.'
+    : !start ? 'Date de début non reconnue.'
+    : endRaw && !end ? 'Date de fin non reconnue.'
+    : end && endNum(end) < startNum(start) ? 'La date de fin précède la date de début.'
+    : $('fFrise').value === '__new' || !friseById($('fFrise').value) ? 'Choisissez une frise.'
+    : null;
+  if (err) { ev.preventDefault(); toast(err); return; }
+  const data = {
+    friseId: $('fFrise').value,
+    title: $('fTitle').value.trim(),
+    start, end,
+    description: $('fDesc').value.trim(),
+    howLearned: $('fHow').value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+  if (editingId) Object.assign(state.entries.find(x => x.id === editingId), data);
+  else state.entries.push({ id: uid(), createdAt: data.updatedAt, ...data });
+  save();
+  if (current !== 'all' && current !== data.friseId) current = data.friseId;
+  renderAll(!editingId && state.entries.length <= 1);
+  if (!editingId) {
+    // recadre si la nouvelle entrée est hors champ
+    const t = startNum(start);
+    if (t < view.start || t > view.end) { fitView(); renderTimeline(); }
+  }
+  toast(editingId ? 'Entrée modifiée' : 'Entrée ajoutée');
+});
+
+$('fDelete').addEventListener('click', () => {
+  const e = state.entries.find(x => x.id === editingId);
+  if (!e || !confirm(`Supprimer « ${e.title} » ?`)) return;
+  state.entries = state.entries.filter(x => x.id !== editingId);
+  dropCards(editingId);
+  save(); $('entryDlg').close(); renderAll(false); toast('Entrée supprimée');
+});
+
+$('addBtn').onclick = () => openForm();
+$('blankAdd').onclick = () => openForm();
+
+/* ---------- Détail ---------- */
+let detailId = null;
+function openDetail(id) {
+  const e = state.entries.find(x => x.id === id);
+  if (!e) return;
+  detailId = id;
+  const f = friseById(e.friseId);
+  $('dTitle').textContent = e.title;
+  $('dBody').innerHTML = `
+    <div><span class="chip"><span class="dot" style="background:${f?.color}"></span>${esc(f?.name)}</span></div>
+    <div class="period">${esc(formatRange(e))}</div>
+    ${e.description ? `<p class="desc">${esc(e.description)}</p>` : ''}
+    ${e.howLearned ? `<div class="howbox"><b>Comment je l'ai appris</b>${esc(e.howLearned)}</div>` : ''}
+    <div class="period" style="font-size:13px">🃏 ${esc(cardStatus(e))}</div>`;
+  $('detailDlg').showModal();
+}
+$('dClose').onclick = () => $('detailDlg').close();
+$('dEdit').onclick = () => { $('detailDlg').close(); openForm(detailId); };
+
+/* ---------- Gestion des frises ---------- */
+function renderFriseDlg() {
+  $('frBody').innerHTML = state.frises.map(f => {
+    const n = state.entries.filter(e => e.friseId === f.id).length;
+    return `<div class="frise-row" data-id="${f.id}">
+      <input type="color" value="${f.color}" aria-label="Couleur">
+      <input type="text" value="${esc(f.name)}" aria-label="Nom">
+      <span style="color:var(--muted);font-size:12px;width:62px">${n} entrée${n > 1 ? 's' : ''}</span>
+      <button class="btn icon danger" data-del title="Supprimer">🗑</button>
+    </div>`;
+  }).join('') || '<p style="color:var(--muted)">Aucune frise.</p>';
+}
+$('frBody').addEventListener('input', e => {
+  const row = e.target.closest('.frise-row'); const f = row && friseById(row.dataset.id);
+  if (!f) return;
+  if (e.target.type === 'color') f.color = e.target.value;
+  else if (e.target.value.trim()) f.name = e.target.value.trim();
+  save(); renderAll(false);
+});
+$('frBody').addEventListener('click', e => {
+  if (!e.target.closest('[data-del]')) return;
+  const f = friseById(e.target.closest('.frise-row').dataset.id);
+  const n = state.entries.filter(x => x.friseId === f.id).length;
+  if (!confirm(n ? `Supprimer la frise « ${f.name} » et ses ${n} entrée(s) ?` : `Supprimer la frise « ${f.name} » ?`)) return;
+  state.frises = state.frises.filter(x => x.id !== f.id);
+  state.entries.filter(x => x.friseId === f.id).forEach(x => dropCards(x.id));
+  state.entries = state.entries.filter(x => x.friseId !== f.id);
+  if (current === f.id) current = 'all';
+  save(); renderFriseDlg(); renderAll(true);
+});
+$('frAdd').onclick = () => { if (promptNewFrise()) { renderFriseDlg(); renderAll(false); } };
+$('frClose').onclick = $('frDone').onclick = () => $('friseDlg').close();
+
+/* ---------- Export / import ---------- */
+$('menuBtn').onclick = e => { e.stopPropagation(); $('menuPop').classList.toggle('open'); };
+document.addEventListener('click', () => $('menuPop').classList.remove('open'));
+$('menuPop').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'xlsx') exportXlsx();
+  if (act === 'anki') exportAnki();
+  if (act === 'json') exportJson();
+  if (act === 'import') $('importFile').click();
+  if (act === 'frises') { renderFriseDlg(); $('friseDlg').showModal(); }
+});
+
+function download(name, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+const exportScope = () => (current === 'all' ? 'toutes' : friseById(current).name).replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase();
+
+function tableRows(list) {
+  return sortEntries(list).map(e => ({
+    'Frise': friseById(e.friseId)?.name || '',
+    'Titre': e.title,
+    'Date de début': formatDate(e.start),
+    'Date de fin': e.end ? formatDate(e.end) : '',
+    'Période': formatRange(e),
+    'Descriptif': e.description,
+    "Comment je l'ai appris": e.howLearned,
+    'Ajouté le': (e.createdAt || '').slice(0, 10)
+  }));
+}
+
+const htmlBr = s => esc(s).replace(/\n/g, '<br>');
+const ankiTag = s => norm(s).replace(/\s+/g, '_');
+
+// Recto : le titre ; verso : la période, le descriptif et le souvenir d'apprentissage.
+function ankiRows(list) {
+  return sortEntries(list).map(e => {
+    const f = friseById(e.friseId);
+    const back = [`<b>${esc(formatRange(e))}</b>`];
+    if (e.description) back.push(htmlBr(e.description));
+    if (e.howLearned) back.push(`<i>Appris : ${htmlBr(e.howLearned)}</i>`);
+    return {
+      'Recto': `${esc(e.title)}<br><small>${esc(f?.name || '')}</small>`,
+      'Verso': back.join('<br><br>'),
+      'Tags': `frises ${ankiTag(f?.name || '')}`
+    };
+  });
+}
+
+function exportXlsx() {
+  const list = visibleEntries();
+  if (!list.length) return toast('Rien à exporter');
+  if (typeof XLSX === 'undefined') { toast('Excel indisponible hors ligne — export CSV à la place'); return exportAnki(); }
+  const wb = XLSX.utils.book_new();
+  const used = new Set();
+  const sheetName = n => {
+    let s = n.replace(/[\[\]\*\?\/\\:]/g, ' ').slice(0, 31) || 'Frise';
+    let k = 2; while (used.has(s)) s = `${s.slice(0, 28)} ${k++}`;
+    used.add(s); return s;
+  };
+  const addSheet = (name, rows, widths) => {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = widths.map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, sheetName(name));
+  };
+  const W = [18, 36, 18, 18, 30, 60, 50, 12];
+  addSheet('Toutes les entrées', tableRows(list), W);
+  visibleFrises().forEach(f => {
+    const rows = tableRows(list.filter(e => e.friseId === f.id));
+    if (rows.length) addSheet(f.name, rows, W);
+  });
+  addSheet('Anki', ankiRows(list), [40, 80, 30]);
+  XLSX.writeFile(wb, `frises-${exportScope()}-${today()}.xlsx`);
+  toast('Fichier Excel téléchargé');
+}
+
+function exportAnki() {
+  const list = visibleEntries();
+  if (!list.length) return toast('Rien à exporter');
+  const q = s => `"${String(s).replace(/"/g, '""')}"`;
+  const lines = ['#separator:Semicolon', '#html:true', '#columns:Recto;Verso;Tags', '#tags column:3'];
+  ankiRows(list).forEach(r => lines.push([r.Recto, r.Verso, r.Tags].map(q).join(';')));
+  download(`anki-frises-${exportScope()}-${today()}.csv`, new Blob(['' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  toast('Fichier Anki téléchargé');
+}
+
+function exportJson() {
+  download(`frises-sauvegarde-${today()}.json`, new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+  toast('Sauvegarde téléchargée');
+}
+
+$('importFile').addEventListener('change', async () => {
+  const file = $('importFile').files[0];
+  $('importFile').value = '';
+  if (!file) return;
+  try {
+    const n = /\.json$/i.test(file.name) ? importJson(JSON.parse(await file.text())) : importXlsx(await file.arrayBuffer());
+    save(); current = 'all'; renderAll(true);
+    toast(`${n} entrée(s) importée(s)`);
+  } catch (err) {
+    console.error(err);
+    toast("Import impossible : fichier non reconnu");
+  }
+});
+
+const entryKey = e => `${norm(e.title.toLowerCase())}|${startNum(e.start)}`;
+
+function frisesByName(name, color) {
+  const n = (name || 'Divers').trim();
+  let f = state.frises.find(x => x.name.toLowerCase() === n.toLowerCase());
+  if (!f) { f = { id: uid(), name: n, color: color || PALETTE[state.frises.length % PALETTE.length] }; state.frises.push(f); }
+  return f;
+}
+
+function importJson(data) {
+  if (!data || !Array.isArray(data.entries) || !Array.isArray(data.frises)) throw new Error('format');
+  const idMap = {};
+  data.frises.forEach(f => { idMap[f.id] = frisesByName(f.name, f.color).id; });
+  const known = new Set(state.entries.map(entryKey));
+  const srsCards = data.srs?.cards || {};
+  let n = 0;
+  data.entries.forEach(e => {
+    if (!e.title || !e.start || known.has(entryKey(e))) return;
+    const id = uid();
+    state.entries.push({ ...e, id, friseId: idMap[e.friseId] || frisesByName('Divers').id });
+    CARD_TYPES.forEach(t => { if (srsCards[`${e.id}:${t}`]) state.srs.cards[`${id}:${t}`] = srsCards[`${e.id}:${t}`]; });
+    known.add(entryKey(e)); n++;
+  });
+  return n;
+}
+
+function importXlsx(buf) {
+  if (typeof XLSX === 'undefined') throw new Error('xlsx');
+  const wb = XLSX.read(buf);
+  const ws = wb.Sheets['Toutes les entrées'] || wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  const known = new Set(state.entries.map(entryKey));
+  let n = 0;
+  rows.forEach(r => {
+    const start = parseDate(String(r['Date de début'] ?? ''));
+    const title = String(r['Titre'] ?? '').trim();
+    if (!title || !start) return;
+    const endRaw = String(r['Date de fin'] ?? '').trim();
+    const e = {
+      id: uid(), friseId: frisesByName(String(r['Frise'] ?? '')).id, title, start,
+      end: endRaw ? parseDate(endRaw) : null,
+      description: String(r['Descriptif'] ?? ''), howLearned: String(r["Comment je l'ai appris"] ?? ''),
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    if (known.has(entryKey(e))) return;
+    state.entries.push(e); known.add(entryKey(e)); n++;
+  });
+  return n;
+}
+
+/* ---------- Répétition espacée ---------- */
+// Chaque entrée produit ses cartes à la volée : modifier une entrée met la carte à jour,
+// et si la réponse (date ou titre) change, la carte repart de zéro.
+const CARD_TYPES = ['when', 'what'];
+const MIN = 60e3, DAY = 864e5;
+const LEARN_STEPS = [1, 10];   // minutes
+const RELEARN_STEP = 10;       // minutes
+const LEARN_AHEAD = 20 * MIN;
+let mode = 'frises';
+
+function cardsFor(entries) {
+  const out = [];
+  entries.forEach(e => {
+    out.push({ id: `${e.id}:when`, entry: e, type: 'when' });
+    if (state.srs.settings.reverse) out.push({ id: `${e.id}:what`, entry: e, type: 'what' });
+  });
+  return out;
+}
+const fingerprint = c => c.type === 'when' ? formatRange(c.entry) : c.entry.title;
+function cardState(c) {
+  const s = state.srs.cards[c.id];
+  return s && s.fp === fingerprint(c) ? s : null;
+}
+function dropCards(entryId) { CARD_TYPES.forEach(t => delete state.srs.cards[`${entryId}:${t}`]); }
+
+const localDate = () => new Date().toLocaleDateString('sv');
+function daily() {
+  const d = localDate();
+  if (state.srs.daily.date !== d) state.srs.daily = { date: d, newCount: 0, extra: 0 };
+  return state.srs.daily;
+}
+const endOfToday = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.getTime(); };
+
+// Variante de SM-2 : apprentissage par étapes courtes, puis intervalles multipliés par la facilité.
+function schedule(prev, grade, now) {
+  const s = prev ? { ...prev } : { phase: 'learn', step: 0, ease: 2.5, interval: 0, reps: 0, lapses: 0 };
+  if (s.phase === 'review') {
+    if (grade === 1) {
+      s.lapses++; s.ease = Math.max(1.3, s.ease - 0.2);
+      s.phase = 'relearn'; s.interval = Math.max(1, Math.round(s.interval * 0.5));
+      s.due = now + RELEARN_STEP * MIN;
+    } else {
+      const good = Math.max(s.interval + 1, Math.round(s.interval * s.ease));
+      if (grade === 2) { s.interval = Math.max(s.interval + 1, Math.round(s.interval * 1.2)); s.ease = Math.max(1.3, s.ease - 0.15); }
+      if (grade === 3) s.interval = good;
+      if (grade === 4) { s.interval = Math.max(good + 1, Math.round(s.interval * s.ease * 1.3)); s.ease += 0.15; }
+      s.due = now + s.interval * DAY;
+    }
+  } else {
+    const relearn = s.phase === 'relearn';
+    const graduate = days => { s.phase = 'review'; s.step = 0; s.interval = days; s.due = now + days * DAY; };
+    if (grade === 1) { s.step = 0; s.due = now + (relearn ? RELEARN_STEP : LEARN_STEPS[0]) * MIN; }
+    else if (grade === 2) s.due = now + (relearn ? RELEARN_STEP : s.step === 0 ? 6 : LEARN_STEPS[s.step]) * MIN;
+    else if (grade === 3) {
+      if (!relearn && s.step + 1 < LEARN_STEPS.length) { s.step++; s.due = now + LEARN_STEPS[s.step] * MIN; }
+      else graduate(relearn ? s.interval : 1);
+    }
+    else graduate(relearn ? s.interval + 1 : 4);
+  }
+  s.reps++; s.last = now;
+  return s;
+}
+
+function fmtDelay(ms) {
+  const m = Math.max(1, Math.round(ms / MIN));
+  if (m < 60) return `${m} min`;
+  if (m < 1440) return `${Math.round(m / 60)} h`;
+  const d = Math.round(m / 1440);
+  if (d < 31) return `${d} j`;
+  if (d < 365) return `${Math.round(d / 30)} mois`;
+  return `${(d / 365).toFixed(1).replace('.0', '').replace('.', ',')} an${d >= 730 ? 's' : ''}`;
+}
+
+function buildQueue() {
+  const now = Date.now(), eod = endOfToday();
+  const learn = [], review = [], fresh = [];
+  cardsFor(visibleEntries()).forEach(c => {
+    const s = cardState(c);
+    if (!s) fresh.push(c);
+    else if (s.phase === 'review') { if (s.due <= eod) review.push(c); }
+    else learn.push(c);
+  });
+  const due = c => cardState(c).due;
+  learn.sort((a, b) => due(a) - due(b));
+  review.sort((a, b) => due(a) - due(b));
+  fresh.sort((a, b) => (a.entry.createdAt || '').localeCompare(b.entry.createdAt || '') || a.type.localeCompare(b.type));
+  const d = daily();
+  const newLeft = Math.max(0, state.srs.settings.newPerDay + d.extra - d.newCount);
+  return { now, learn, review, fresh: fresh.slice(0, newLeft), freshTotal: fresh.length };
+}
+
+function nextCard(q) {
+  const ready = q.learn.find(c => cardState(c).due <= q.now);
+  if (ready) return ready;
+  // alterne révisions et nouvelles cartes pour éviter les longues séries de nouveautés
+  if (q.review.length && (!q.fresh.length || q.review.length >= q.fresh.length)) return q.review[0];
+  if (q.fresh.length) return q.fresh[0];
+  if (q.review.length) return q.review[0];
+  return q.learn.find(c => cardState(c).due <= q.now + LEARN_AHEAD) || null;
+}
+
+function dueCount(q) {
+  return q.review.length + q.fresh.length + q.learn.filter(c => cardState(c).due <= q.now + LEARN_AHEAD).length;
+}
+
+function cardStatus(e) {
+  const s = cardState({ id: `${e.id}:when`, entry: e, type: 'when' });
+  if (!s) return 'Carte nouvelle, pas encore révisée';
+  const when = s.due <= Date.now() ? "à réviser maintenant" : `prochaine révision dans ${fmtDelay(s.due - Date.now())}`;
+  return `${s.phase === 'review' ? `Intervalle ${fmtDelay(s.interval * DAY)}` : "En cours d'apprentissage"} · ${when}`;
+}
+
+function renderBadge() {
+  const saved = current; current = 'all';
+  const n = dueCount(buildQueue());
+  current = saved;
+  $('dueBadge').textContent = n ? String(n) : '';
+}
+
+let rv = { card: null, revealed: false, hint: false, done: 0 };
+const undoStack = [];
+
+function renderReview() {
+  const sec = $('reviewSection');
+  if (!state.entries.length) {
+    sec.innerHTML = `<div class="blank"><h2>Aucune carte pour l'instant</h2><p>Chaque entrée ajoutée à une frise devient automatiquement une carte de révision.</p><button class="btn primary" onclick="openForm()">＋ Ajouter une entrée</button></div>`;
+    return;
+  }
+  const q = buildQueue();
+  const card = (rv.card && [...q.learn, ...q.review, ...q.fresh].some(c => c.id === rv.card.id)
+    && (cardState(rv.card)?.due ?? 0) <= q.now + LEARN_AHEAD) ? rv.card : nextCard(q);
+  if (!rv.card || !card || card.id !== rv.card.id) { rv.revealed = false; rv.hint = false; }
+  if (card) rv.card = [...q.learn, ...q.review, ...q.fresh].find(c => c.id === card.id);
+  else rv.card = null;
+
+  const learnNow = q.learn.filter(c => cardState(c).due <= q.now + LEARN_AHEAD).length;
+  const remaining = dueCount(q);
+  const pct = rv.done + remaining ? Math.round(rv.done / (rv.done + remaining) * 100) : 100;
+  const scope = current === 'all' ? 'toutes les frises' : friseById(current)?.name;
+  const top = `
+    <div class="rv-top">
+      <div class="counts">
+        <span class="c-new"><b>${q.fresh.length}</b> nouvelles</span>
+        <span class="c-learn"><b>${learnNow}</b> en cours</span>
+        <span class="c-rev"><b>${q.review.length}</b> à revoir</span>
+      </div>
+      <button class="btn icon" id="rvUndo" title="Annuler la dernière réponse (Z)" ${undoStack.length ? '' : 'disabled'}>↶</button>
+      <button class="btn icon" id="rvSettings" title="Réglages">⚙︎</button>
+    </div>
+    <div class="progress"><div style="width:${pct}%"></div></div>`;
+
+  if (!rv.card) {
+    const all = cardsFor(visibleEntries());
+    const states = all.map(cardState).filter(Boolean);
+    const upcoming = states.filter(s => s.due > q.now).sort((a, b) => a.due - b.due)[0];
+    const mature = states.filter(s => s.phase === 'review' && s.interval >= 21).length;
+    const capped = q.freshTotal > q.fresh.length;
+    sec.innerHTML = top + `
+      <div class="rv-done">
+        <h2>🎉 Tout est révisé${rv.done ? '' : ' pour aujourd’hui'}</h2>
+        <p>${scope ? `Pour ${esc(scope)}. ` : ''}${upcoming ? `Prochaine carte dans ${fmtDelay(upcoming.due - q.now)}.` : ''}</p>
+        ${capped ? `<p>${q.freshTotal - q.fresh.length} nouvelle(s) carte(s) en attente (limite du jour atteinte).</p><button class="btn primary" id="rvMore">Apprendre 10 cartes de plus</button>` : ''}
+        <div class="stats">
+          <div class="stat"><b>${all.length}</b><span>cartes</span></div>
+          <div class="stat"><b>${states.length}</b><span>déjà vues</span></div>
+          <div class="stat"><b>${mature}</b><span>bien ancrées (≥ 3 sem.)</span></div>
+        </div>
+      </div>`;
+    bindReviewTop();
+    const more = $('rvMore');
+    if (more) more.onclick = () => { daily().extra += 10; save(); renderAll(); };
+    return;
+  }
+
+  const c = rv.card, e = c.entry, f = friseById(e.friseId);
+  const s = cardState(c);
+  const question = c.type === 'when'
+    ? `<div class="q">${esc(e.title)}</div><div class="qsub">Quand ?</div>`
+    : `<div class="q">${esc(formatRange(e))}</div><div class="qsub">Quoi ? · ${esc(f?.name || '')}</div>`;
+  const answer = !rv.revealed ? '' : `
+    <hr>
+    <div class="a">${esc(c.type === 'when' ? formatRange(e) : e.title)}</div>
+    ${e.description ? `<p class="desc">${esc(e.description)}</p>` : ''}
+    ${e.howLearned ? `<div class="howbox"><b>Comment je l'ai appris</b>${esc(e.howLearned)}</div>` : ''}`;
+  const hint = rv.revealed || !e.howLearned ? ''
+    : rv.hint ? `<div class="howbox"><b>Indice : comment je l'ai appris</b>${esc(e.howLearned)}</div>`
+    : `<button class="hint-btn" id="rvHint">💡 Indice : comment je l'ai appris (H)</button>`;
+  const labels = ['À revoir', 'Difficile', 'Bien', 'Facile'];
+  const actions = rv.revealed
+    ? `<div class="grades">${labels.map((l, i) => `<button class="grade g${i + 1}" data-g="${i + 1}">${l}<small>${fmtDelay(schedule(s, i + 1, q.now).due - q.now)}</small></button>`).join('')}</div>
+       <div class="kbd">Touches 1 · 2 · 3 · 4 — Espace = Bien</div>`
+    : `<button class="btn primary reveal" id="rvReveal">Afficher la réponse</button><div class="kbd">Espace pour afficher · H pour l'indice</div>`;
+  sec.innerHTML = top + `
+    <div class="rv-card" id="rvCard">
+      <span class="chip"><span class="dot" style="background:${f?.color}"></span>${esc(f?.name || '')}${s ? '' : ' · nouvelle'}</span>
+      ${question}${hint}${answer}
+    </div>
+    <div class="rv-actions">${actions}</div>`;
+  bindReviewTop();
+  $('rvCard').onclick = ev => { if (!rv.revealed && !ev.target.closest('#rvHint')) reveal(); };
+  if ($('rvHint')) $('rvHint').onclick = showHint;
+  if ($('rvReveal')) $('rvReveal').onclick = reveal;
+  sec.querySelectorAll('.grade').forEach(b => b.onclick = () => answerCard(+b.dataset.g));
+}
+
+function bindReviewTop() {
+  $('rvUndo').onclick = undo;
+  $('rvSettings').onclick = openSrsSettings;
+}
+
+function reveal() { rv.revealed = true; renderReview(); }
+function showHint() { rv.hint = true; renderReview(); }
+
+function answerCard(grade) {
+  const c = rv.card;
+  if (!c || !rv.revealed) return;
+  const prev = cardState(c);
+  undoStack.push({ id: c.id, raw: state.srs.cards[c.id], wasNew: !prev, card: c });
+  if (undoStack.length > 50) undoStack.shift();
+  if (!prev) daily().newCount++;
+  state.srs.cards[c.id] = { ...schedule(prev, grade, Date.now()), fp: fingerprint(c) };
+  rv.done++; rv.card = null;
+  save(); renderAll();
+}
+
+function undo() {
+  const u = undoStack.pop();
+  if (!u) return;
+  if (u.raw) state.srs.cards[u.id] = u.raw; else delete state.srs.cards[u.id];
+  if (u.wasNew) daily().newCount = Math.max(0, daily().newCount - 1);
+  rv.done = Math.max(0, rv.done - 1);
+  rv.card = u.card; rv.revealed = true; rv.hint = false;
+  save(); renderAll();
+}
+
+function openSrsSettings() {
+  $('sNew').value = state.srs.settings.newPerDay;
+  $('sReverse').checked = state.srs.settings.reverse;
+  $('srsDlg').showModal();
+}
+$('sNew').addEventListener('change', () => {
+  const v = Math.round(+$('sNew').value);
+  if (v >= 0) { state.srs.settings.newPerDay = v; save(); renderAll(); }
+});
+$('sReverse').addEventListener('change', () => { state.srs.settings.reverse = $('sReverse').checked; save(); renderAll(); });
+$('srsClose').onclick = $('srsDone').onclick = () => $('srsDlg').close();
+
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.mode; rv.done = 0; rv.card = null;
+  renderAll(true);
+}));
+
+document.addEventListener('keydown', ev => {
+  if (mode !== 'review' || document.querySelector('dialog[open]') || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+  const k = ev.key.toLowerCase();
+  if (k === ' ' || k === 'enter') { ev.preventDefault(); rv.revealed ? answerCard(3) : reveal(); }
+  else if (/^[1-4]$/.test(k)) answerCard(+k);
+  else if (k === 'h' && !rv.revealed && rv.card?.entry.howLearned) showHint();
+  else if (k === 'z') undo();
+});
+
+// Les cartes en apprentissage reviennent après quelques minutes : on rafraîchit régulièrement.
+setInterval(() => { renderBadge(); if (mode === 'review' && !rv.card) renderReview(); }, 30e3);
+
+renderAll(true);
+</script>
+</body>
+</html>
