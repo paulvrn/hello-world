@@ -252,6 +252,25 @@ label.chk small { display: block; color: var(--muted); font-size: 12px; }
 .ext-row .m { font-size: 12px; color: var(--muted); }
 .ext-row .y { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 7px 8px; font-size: 15px; width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
 .ext-row .y.err { border-color: var(--danger); }
+/* ---------- Spotify ---------- */
+#spDlg { width: min(600px, calc(100vw - 32px)); }
+#spDlg[open] { display: flex; flex-direction: column; }
+#spDlg .dlg-body { overflow-y: auto; }
+.src code { font-size: 12.5px; background: var(--surface-2); padding: 2px 6px; border-radius: 6px; overflow-wrap: anywhere; color: var(--text); }
+.sp-warn { font-size: 13px; color: var(--danger); margin: 0; }
+.sp-ok { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.sp-ok .dot { width: 9px; height: 9px; border-radius: 50%; background: #1db954; }
+.stats.sp { max-width: none; margin: 0; }
+.listens { display: grid; gap: 6px; }
+.listens b { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.listens ul { margin: 0; padding-left: 18px; font-size: 13.5px; font-variant-numeric: tabular-nums; display: grid; gap: 2px; }
+.listens ul span { color: var(--muted); }
+.listens summary { cursor: pointer; font-size: 13px; color: var(--accent); margin-top: 4px; }
+.links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.links .lbl { color: var(--muted); }
+.links button { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+.links button:hover { border-color: var(--accent); }
+.card .plays { color: #15803d; }
 </style>
 </head>
 <body>
@@ -272,6 +291,7 @@ label.chk small { display: block; color: var(--muted); font-size: 12px; }
       <button data-act="import">📥 Importer (.json ou .xlsx)<small>Fusionne avec les entrées existantes</small></button>
       <hr>
       <button data-act="ext">📚 Livres et films (Goodreads, Letterboxd)<small>Ajoute vos lectures et films vus aux frises</small></button>
+      <button data-act="spotify">🎧 Spotify<small id="spMenuSub">Chaque son écouté débloque sa carte et celle de l'artiste</small></button>
       <hr>
       <button data-act="frises">🎨 Gérer les frises</button>
     </div>
@@ -389,6 +409,12 @@ label.chk small { display: block; color: var(--muted); font-size: 12px; }
   <div class="dlg-body" id="extBody"></div>
   <div class="dlg-foot" id="extFoot"></div>
 </dialog>
+<!-- Spotify -->
+<dialog id="spDlg">
+  <div class="dlg-head"><h2>🎧 Spotify</h2><button class="btn icon" id="spClose">✕</button></div>
+  <div class="dlg-body" id="spBody"></div>
+  <div class="dlg-foot" id="spFoot"></div>
+</dialog>
 <input type="file" id="extFile" accept=".csv,.zip,text/csv,application/zip" hidden>
 
 <input type="file" id="importFile" accept=".json,.xlsx,.xls" hidden>
@@ -431,6 +457,7 @@ function withSrs(s) {
   s.srs.cards = s.srs.cards || {};
   s.srs.daily = s.srs.daily || { date: '', newCount: 0, extra: 0 };
   s.srs.settings = { newPerDay: 15, reverse: false, ...s.srs.settings };
+  s.spotify = { clientId: '', newest: '', lastSync: '', gap: null, ...s.spotify };
   return s;
 }
 
@@ -719,7 +746,7 @@ function renderCards() {
   $('cards').innerHTML = list.map(e => {
     const fr = friseById(e.friseId);
     return `<button class="card" data-id="${e.id}" style="--c:${fr ? fr.color : ''}">
-      <div class="date">${esc(formatRange(e))}${current === 'all' && fr ? ' · ' + esc(fr.name) : ''}</div>
+      <div class="date">${esc(formatRange(e))}${current === 'all' && fr ? ' · ' + esc(fr.name) : ''}${playCount(e) ? ` · <span class="plays">🎧 ${playCount(e)} écoute${playCount(e) > 1 ? 's' : ''}</span>` : ''}</div>
       <h3>${esc(e.title)}</h3>
       ${e.description ? `<p>${esc(e.description)}</p>` : ''}
       ${e.howLearned ? `<div class="how">${esc(e.howLearned)}</div>` : ''}
@@ -805,7 +832,10 @@ $('fSave').addEventListener('click', ev => {
     howLearned: $('fHow').value.trim(),
     updatedAt: new Date().toISOString()
   };
-  if (editingId) Object.assign(state.entries.find(x => x.id === editingId), data);
+  const old = editingId && state.entries.find(x => x.id === editingId);
+  // Une date corrigée à la main n'est plus recalculée par la synchronisation Spotify.
+  if (old && old.autoDate && formatDate(old.start) !== formatDate(start)) data.autoDate = false;
+  if (editingId) Object.assign(old, data);
   else state.entries.push({ id: uid(), createdAt: data.updatedAt, ...data });
   save();
   if (current !== 'all' && current !== data.friseId) current = data.friseId;
@@ -842,9 +872,13 @@ function openDetail(id) {
     <div class="period">${esc(formatRange(e))}</div>
     ${e.description ? `<p class="desc">${esc(e.description)}</p>` : ''}
     ${e.howLearned ? `<div class="howbox"><b>Comment je l'ai appris</b>${esc(e.howLearned)}</div>` : ''}
+    ${linksHtml(e)}
+    ${listensHtml(e)}
     <div class="period" style="font-size:13px">🃏 ${esc(cardStatus(e))}</div>`;
-  $('detailDlg').showModal();
+  $('dBody').scrollTop = 0;
+  if (!$('detailDlg').open) $('detailDlg').showModal();
 }
+$('dBody').addEventListener('click', ev => { const b = ev.target.closest('[data-open]'); if (b) openDetail(b.dataset.open); });
 $('dClose').onclick = () => $('detailDlg').close();
 $('dEdit').onclick = () => { $('detailDlg').close(); openForm(detailId); };
 
@@ -893,6 +927,7 @@ $('menuPop').addEventListener('click', e => {
   if (act === 'json') exportJson();
   if (act === 'import') $('importFile').click();
   if (act === 'ext') openExt();
+  if (act === 'spotify') openSpotify();
   if (act === 'frises') { renderFriseDlg(); $('friseDlg').showModal(); }
 });
 
@@ -1009,13 +1044,19 @@ function importJson(data) {
   const known = new Set(state.entries.map(entryKey));
   const srsCards = data.srs?.cards || {};
   let n = 0;
+  const newIds = {}, added = [];
   data.entries.forEach(e => {
-    if (!e.title || !e.start || known.has(entryKey(e))) return;
+    if (!e.title || !e.start) return;
+    if (known.has(entryKey(e))) { newIds[e.id] = state.entries.find(x => entryKey(x) === entryKey(e))?.id; return; }
     const id = uid();
-    state.entries.push({ ...e, id, friseId: idMap[e.friseId] || frisesByName('Divers').id });
+    newIds[e.id] = id;
+    const copy = { ...e, id, friseId: idMap[e.friseId] || frisesByName('Divers').id };
+    state.entries.push(copy); added.push(copy);
     CARD_TYPES.forEach(t => { if (srsCards[`${e.id}:${t}`]) state.srs.cards[`${id}:${t}`] = srsCards[`${e.id}:${t}`]; });
     known.add(entryKey(e)); n++;
   });
+  // Les cartes de contenu gardent leur lien vers leur carte primaire.
+  added.forEach(e => { if (e.parentId) e.parentId = newIds[e.parentId] || null; });
   return n;
 }
 
@@ -1275,6 +1316,274 @@ $('extFile').addEventListener('change', async () => {
     toast("Fichier non reconnu : choisissez l'export Goodreads (.csv) ou Letterboxd (.zip)");
   }
 });
+
+/* ---------- Spotify ---------- */
+// Chaque son écouté sur Spotify débloque deux cartes dans la frise Musique :
+//  · l'artiste, carte primaire « personne » (src `spotify:artist:<id>`) ;
+//  · le son, carte de contenu liée à l'artiste (kind 'contenu', parentId), qui garde dans
+//    `listens` l'horodatage de chaque écoute.
+// Spotify n'envoie rien en temps réel et ne donne que les 50 derniers sons écoutés : on interroge
+// donc « recently-played » à l'ouverture de l'appli, au retour sur l'onglet et toutes les
+// 3 minutes, et l'historique s'accumule ici, dans le navigateur.
+// Connexion OAuth « PKCE » : pas de serveur ni de secret, seulement le Client ID de l'appli
+// Spotify que l'utilisateur crée une fois sur developer.spotify.com.
+const SP_AUTH_KEY = 'frises-spotify-auth';
+const SP_PKCE_KEY = 'frises-spotify-pkce';
+const SP_SYNC_EVERY = 3 * 60e3;
+const spRedirect = () => location.origin + location.pathname;
+const spGet = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
+const spPut = (k, v) => { try { v ? localStorage.setItem(k, JSON.stringify(v)) : localStorage.removeItem(k); } catch (e) { /* stockage indisponible */ } };
+const spAuth = () => spGet(SP_AUTH_KEY);
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const fmtListen = iso => new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const isTrack = e => (e.src || '').startsWith('spotify:track:');
+const isArtist = e => (e.src || '').startsWith('spotify:artist:');
+
+// Écoutes d'une carte : celles du son, ou celles de tous les sons d'un artiste.
+function listensOf(e) {
+  if (isArtist(e)) {
+    return state.entries.filter(t => isTrack(t) && (t.artists || []).includes(e.src))
+      .flatMap(t => (t.listens || []).map(at => ({ at, track: t })));
+  }
+  return (e.listens || []).map(at => ({ at }));
+}
+const playCount = e => (isTrack(e) || isArtist(e)) ? listensOf(e).length : 0;
+
+function listensHtml(e) {
+  const list = listensOf(e).sort((a, b) => b.at.localeCompare(a.at));
+  if (!list.length) return '';
+  const li = l => `<li>${esc(fmtListen(l.at))}${l.track ? ` <span>· ${esc(l.track.title)}</span>` : ''}</li>`;
+  const head = list.slice(0, 10), rest = list.slice(10);
+  return `<div class="howbox listens"><b>🎧 Historique d'écoute · ${list.length} écoute${list.length > 1 ? 's' : ''}</b>
+    <ul>${head.map(li).join('')}</ul>
+    ${rest.length ? `<details><summary>Voir les ${rest.length} autres</summary><ul>${rest.map(li).join('')}</ul></details>` : ''}</div>`;
+}
+
+// Liens entre carte primaire et cartes de contenu.
+function linksHtml(e) {
+  const btn = x => `<button data-open="${x.id}">${esc(x.title)}</button>`;
+  if (e.parentId || (e.artists || []).length) {
+    const arts = state.entries.filter(x => x.id === e.parentId || (e.artists || []).includes(x.src));
+    if (arts.length) return `<div class="links"><span class="lbl">Artiste${arts.length > 1 ? 's' : ''} :</span>${arts.map(btn).join('')}</div>`;
+  }
+  const kids = state.entries.filter(x => x.parentId === e.id || (isArtist(e) && (x.artists || []).includes(e.src)));
+  return kids.length ? `<div class="links"><span class="lbl">Sons débloqués :</span>${sortEntries(kids).map(btn).join('')}</div>` : '';
+}
+
+function spDate(album) {
+  const d = album && album.release_date;
+  if (!d || /^0000/.test(d)) return null;
+  const p = parseDate(album.release_date_precision === 'year' ? d.slice(0, 4) : d);
+  return p && p.y > 0 ? p : null;
+}
+
+async function spLogin() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  const st = b64url(crypto.getRandomValues(new Uint8Array(12)));
+  spPut(SP_PKCE_KEY, { verifier, state: st });
+  location.href = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
+    response_type: 'code', client_id: state.spotify.clientId, scope: 'user-read-recently-played',
+    redirect_uri: spRedirect(), code_challenge_method: 'S256', code_challenge: challenge, state: st
+  });
+}
+
+async function spToken(params) {
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: state.spotify.clientId, ...params })
+  });
+  if (!r.ok) { const err = new Error('token'); err.status = r.status; throw err; }
+  const j = await r.json();
+  const a = { access: j.access_token, refresh: j.refresh_token || spAuth()?.refresh, exp: Date.now() + (j.expires_in - 60) * 1000 };
+  spPut(SP_AUTH_KEY, a);
+  return a;
+}
+
+async function spAccess(force) {
+  const a = spAuth();
+  if (!a) return null;
+  if (!force && Date.now() < a.exp) return a.access;
+  try { return (await spToken({ grant_type: 'refresh_token', refresh_token: a.refresh })).access; }
+  catch (err) {
+    if (err.status === 400 || err.status === 401) { spPut(SP_AUTH_KEY, null); toast('Spotify déconnecté : reconnectez-vous depuis le menu'); renderSpMenu(); }
+    throw err;
+  }
+}
+
+// Retour de Spotify après « Se connecter » : ?code=… dans l'adresse.
+async function spHandleCallback() {
+  const p = new URLSearchParams(location.search);
+  if (!p.has('code') && !p.has('error')) return false;
+  const saved = spGet(SP_PKCE_KEY);
+  spPut(SP_PKCE_KEY, null);
+  history.replaceState(null, '', spRedirect() + location.hash);
+  if (p.get('error') || !saved || saved.state !== p.get('state')) { toast('Connexion à Spotify annulée'); return false; }
+  try {
+    await spToken({ grant_type: 'authorization_code', code: p.get('code'), redirect_uri: spRedirect(), code_verifier: saved.verifier });
+    return true;
+  } catch (err) {
+    console.error(err);
+    toast('Connexion à Spotify impossible : vérifiez le Client ID et la Redirect URI');
+    return false;
+  }
+}
+
+// Intègre les écoutes reçues ; renvoie les cartes débloquées et le nombre de nouvelles écoutes.
+function spApply(items) {
+  const music = frisesByName('Musique');
+  const bySrc = new Map();
+  state.entries.forEach(e => { if (e.src) bySrc.set(e.src, e); if (e.songKey) bySrc.set(e.songKey, e); });
+  const unlocked = [], now = new Date().toISOString();
+  let plays = 0;
+  items.slice().sort((a, b) => a.played_at.localeCompare(b.played_at)).forEach(it => {
+    const t = it.track;
+    if (!t || !t.id || !it.played_at) return;
+    const played = new Date(it.played_at);
+    const rel = spDate(t.album);
+    const year = { y: (rel || { y: played.getFullYear() }).y, m: null, d: null };
+    const found = `Découvert sur Spotify le ${fmtListen(it.played_at)}`;
+    const artists = (t.artists || []).filter(a => a.id).map(a => {
+      const src = `spotify:artist:${a.id}`;
+      let e = bySrc.get(src);
+      if (!e) {
+        // Spotify ne donne pas de date de naissance : on place l'artiste à l'année de son plus ancien son écouté.
+        e = { id: uid(), kind: 'personne', friseId: music.id, title: a.name, start: year, end: null, autoDate: true,
+          description: '', howLearned: `${found}, en écoutant « ${t.name} »`, src, createdAt: now, updatedAt: now };
+        state.entries.push(e); bySrc.set(src, e); unlocked.push(e);
+      } else if (e.autoDate && year.y < e.start.y) e.start = year;
+      return e;
+    });
+    // Un même son peut exister en single et sur l'album : on le reconnaît aussi par titre + artiste.
+    const songKey = `spotify:song:${artists[0]?.src || ''}:${norm(t.name.toLowerCase())}`;
+    let te = bySrc.get(`spotify:track:${t.id}`) || bySrc.get(songKey);
+    if (!te) {
+      te = { id: uid(), kind: 'contenu', parentId: artists[0]?.id || null, friseId: music.id,
+        title: `${t.name} (${(t.artists || []).map(a => a.name).join(', ')})`, start: rel || year, end: null, autoDate: true,
+        description: t.album?.name && t.album.album_type !== 'single' ? `Album : ${t.album.name}` : '',
+        howLearned: found, src: `spotify:track:${t.id}`, songKey, artists: artists.map(a => a.src),
+        url: t.external_urls?.spotify || '', listens: [], createdAt: now, updatedAt: now };
+      state.entries.push(te); bySrc.set(te.src, te); bySrc.set(songKey, te); unlocked.push(te);
+    } else if (te.autoDate && rel && startNum(rel) < startNum(te.start)) te.start = rel;
+    te.listens = te.listens || [];
+    if (!te.listens.includes(it.played_at)) { te.listens.push(it.played_at); plays++; }
+  });
+  return { unlocked, plays };
+}
+
+let spBusy = false;
+async function spSync(manual) {
+  if (spBusy || !spAuth() || !state.spotify.clientId) return;
+  spBusy = true;
+  try {
+    let token = await spAccess();
+    const url = 'https://api.spotify.com/v1/me/player/recently-played?limit=50';
+    let r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 401) { token = await spAccess(true); r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } }); }
+    if (!r.ok) { const err = new Error('api'); err.status = r.status; throw err; }
+    const items = (await r.json()).items || [];
+    const sp = state.spotify;
+    // Plus de 50 sons depuis la dernière synchro : les plus anciens ne sont plus disponibles chez Spotify.
+    const oldest = items.reduce((m, it) => (!m || it.played_at < m ? it.played_at : m), '');
+    if (sp.newest && items.length >= 50 && oldest > sp.newest) sp.gap = { from: sp.newest, to: oldest };
+    const { unlocked, plays } = spApply(items);
+    items.forEach(it => { if (it.played_at > sp.newest) sp.newest = it.played_at; });
+    sp.lastSync = new Date().toISOString();
+    save();
+    if (unlocked.length || plays) renderAll(false);
+    if (unlocked.length === 1) toast(`🔓 Carte débloquée : ${unlocked[0].title}`);
+    else if (unlocked.length) toast(`🔓 ${unlocked.length} cartes débloquées · ${plays} écoute${plays > 1 ? 's' : ''}`);
+    else if (plays) toast(`🎧 ${plays} nouvelle${plays > 1 ? 's' : ''} écoute${plays > 1 ? 's' : ''} ajoutée${plays > 1 ? 's' : ''}`);
+    else if (manual) toast('Aucune nouvelle écoute');
+  } catch (err) {
+    console.error(err);
+    if (manual || err.status === 403) toast(err.status === 403
+      ? "Spotify refuse l'accès : ajoutez votre compte dans « User Management » de l'appli Spotify"
+      : err.status === 429 ? 'Spotify demande de patienter un peu' : 'Synchronisation Spotify impossible pour le moment');
+  } finally {
+    spBusy = false;
+    renderSpMenu();
+    if ($('spDlg').open) renderSpotify();
+  }
+}
+
+function renderSpMenu() {
+  const sp = state.spotify;
+  $('spMenuSub').textContent = spAuth()
+    ? `Connecté${sp.lastSync ? ` · synchro ${new Date(sp.lastSync).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}`
+    : "Chaque son écouté débloque sa carte et celle de l'artiste";
+}
+
+function openSpotify() { renderSpotify(); $('spDlg').showModal(); }
+
+function renderSpotify() {
+  const sp = state.spotify, connected = !!spAuth();
+  const intro = `<p class="ext-note">Chaque son que vous écoutez sur Spotify débloque deux cartes dans la frise Musique : l'artiste, et le son, lié à sa carte. Dans la fiche, l'historique d'écoute liste chaque fois que vous l'avez écouté.</p>`;
+  const limits = `<p class="ext-note"><b>Bon à savoir.</b> Spotify ne prévient pas l'appli en direct et ne garde que vos 50 derniers sons. L'appli les récupère quand vous l'ouvrez puis toutes les 3 minutes tant qu'elle est ouverte, et conserve tout l'historique ici. Ouvrez-la au moins une fois toutes les ~50 écoutes pour n'en perdre aucune. Seuls les sons écoutés plus de 30 secondes comptent, sur tous vos appareils ; les podcasts ne sont pas pris en compte.</p>`;
+  if (!connected) {
+    const redirect = spRedirect();
+    const warn = location.protocol === 'file:' ? "Ouvrez l'appli depuis son adresse web (https://…) : Spotify refuse les fichiers ouverts en local."
+      : location.hostname === 'localhost' ? `Spotify refuse « localhost » : ouvrez plutôt l'appli via http://127.0.0.1${location.port ? ':' + location.port : ''}${location.pathname}.`
+      : !window.isSecureContext ? "L'appli doit être servie en https pour se connecter à Spotify." : '';
+    $('spBody').innerHTML = `${intro}
+      <div class="src">
+        <h3>Une seule fois : créez votre accès Spotify</h3>
+        <ol>
+          <li>Ouvrez le <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">tableau de bord Spotify for Developers</a> et cliquez « Create app » (un compte Premium est demandé par Spotify).</li>
+          <li>Dans « Redirect URIs », collez exactement : <code>${esc(redirect)}</code> <button class="btn icon" id="spCopy" title="Copier">📋</button></li>
+          <li>Cochez « Web API », enregistrez, puis copiez le « Client ID » ci-dessous.</li>
+        </ol>
+        <label class="f">Client ID
+          <input id="spClient" value="${esc(sp.clientId)}" placeholder="32 caractères, ex. 1a2b3c…" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      ${warn ? `<p class="sp-warn">⚠️ ${esc(warn)}</p>` : ''}
+      ${limits}`;
+    $('spFoot').innerHTML = `<span class="grow"></span><button class="btn" id="spCancel">Fermer</button>
+      <button class="btn primary" id="spLogin" ${/^[0-9a-f]{32}$/i.test(sp.clientId) && !warn ? '' : 'disabled'}>Se connecter à Spotify</button>`;
+    return;
+  }
+  const tracks = state.entries.filter(isTrack), artists = state.entries.filter(isArtist);
+  const plays = tracks.reduce((n, e) => n + (e.listens || []).length, 0);
+  $('spBody').innerHTML = `
+    <div class="sp-ok"><span class="dot"></span>Connecté à Spotify${sp.lastSync ? ` · dernière synchro ${esc(fmtListen(sp.lastSync))}` : ''}</div>
+    <div class="stats sp">
+      <div class="stat"><b>${artists.length}</b><span>artiste${artists.length > 1 ? 's' : ''}</span></div>
+      <div class="stat"><b>${tracks.length}</b><span>son${tracks.length > 1 ? 's' : ''}</span></div>
+      <div class="stat"><b>${plays}</b><span>écoute${plays > 1 ? 's' : ''}</span></div>
+    </div>
+    ${sp.gap ? `<p class="sp-warn">⚠️ Des écoutes entre le ${esc(fmtListen(sp.gap.from))} et le ${esc(fmtListen(sp.gap.to))} n'ont pas pu être récupérées : plus de 50 sons ont été écoutés sans ouvrir l'appli.</p>` : ''}
+    ${intro}${limits}`;
+  $('spFoot').innerHTML = `<button class="btn danger" id="spLogout">Se déconnecter</button><span class="grow"></span>
+    <button class="btn primary" id="spSync" ${spBusy ? 'disabled' : ''}>${spBusy ? 'Synchronisation…' : 'Synchroniser maintenant'}</button>`;
+}
+
+$('spClose').onclick = () => $('spDlg').close();
+$('spDlg').addEventListener('input', e => {
+  if (e.target.id !== 'spClient') return;
+  state.spotify.clientId = e.target.value.trim(); save();
+  $('spLogin').disabled = !/^[0-9a-f]{32}$/i.test(state.spotify.clientId) || location.protocol === 'file:' || location.hostname === 'localhost' || !window.isSecureContext;
+});
+$('spDlg').addEventListener('click', e => {
+  const id = e.target.id;
+  if (id === 'spCancel') $('spDlg').close();
+  else if (id === 'spLogin') spLogin().catch(err => { console.error(err); toast('Connexion impossible depuis cette page'); });
+  else if (id === 'spSync') { spSync(true); renderSpotify(); }
+  else if (id === 'spCopy') navigator.clipboard?.writeText(spRedirect()).then(() => toast('Adresse copiée'), () => toast('Copie impossible : sélectionnez le texte'));
+  else if (id === 'spLogout' && confirm('Se déconnecter de Spotify ? Les cartes et l’historique déjà débloqués sont conservés.')) {
+    spPut(SP_AUTH_KEY, null); renderSpotify(); renderSpMenu();
+  }
+});
+
+async function spInit() {
+  renderSpMenu();
+  if (await spHandleCallback()) { openSpotify(); toast('Spotify connecté'); }
+  if (spAuth()) spSync(false);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - new Date(state.spotify.lastSync || 0) > 60e3) spSync(false);
+  });
+  setInterval(() => { if (document.visibilityState === 'visible') spSync(false); }, SP_SYNC_EVERY);
+}
 
 /* ---------- Répétition espacée ---------- */
 // Chaque entrée produit ses cartes à la volée : modifier une entrée met la carte à jour,
@@ -1542,6 +1851,7 @@ document.addEventListener('keydown', ev => {
 setInterval(() => { renderBadge(); if (mode === 'review' && !rv.card) renderReview(); }, 30e3);
 
 renderAll(true);
+spInit();
 </script>
 </body>
 </html>

@@ -59,6 +59,38 @@ type « objet ») avec sa carte de révision.
   les flux RSS des deux sites ne sont pas lisibles depuis une page statique
   (CORS). Il faudrait un petit serveur relais.
 
+## Spotify : débloquer les cartes en écoutant
+
+Menu **Exporter / Importer → Spotify**. Une fois connecté, chaque son écouté
+sur Spotify (sur n'importe quel appareil) débloque deux cartes dans la frise
+Musique :
+
+- l'**artiste**, carte primaire de type « personne », placée à l'année de son
+  plus ancien son écouté (Spotify ne donne pas de date de naissance ; la date
+  corrigée à la main n'est plus touchée) ;
+- le **son**, carte de contenu liée à l'artiste, datée de sa sortie.
+
+La fiche du son liste dans **Historique d'écoute** chaque date et heure
+d'écoute ; celle de l'artiste regroupe les écoutes de tous ses sons et
+renvoie vers eux.
+
+Mise en place (une fois) : créer une appli sur
+[developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
+(Spotify exige un compte Premium pour le propriétaire de l'appli et limite le
+mode développement à 5 comptes), y coller l'adresse de l'outil comme
+*Redirect URI* (affichée dans la fenêtre), cocher *Web API* et coller le
+*Client ID* dans l'outil. La connexion se fait en OAuth PKCE, sans serveur ni
+secret. L'outil doit être servi en `https://` (ou `http://127.0.0.1` en
+local, Spotify refusant `localhost` et `file://`).
+
+Limites de Spotify : pas de notification en temps réel, et l'API ne donne
+que les **50 derniers sons** écoutés (de plus de 30 secondes). L'outil les
+récupère à l'ouverture, au retour sur l'onglet et toutes les 3 minutes, et
+accumule l'historique dans le navigateur. Si plus de 50 sons sont écoutés
+sans ouvrir l'outil, les plus anciens sont perdus ; la fenêtre Spotify le
+signale. Un suivi sans trou demanderait un petit serveur qui interroge
+Spotify régulièrement.
+
 ## Export / import
 
 - **Excel (.xlsx)** : une feuille « Toutes les entrées », une feuille par
